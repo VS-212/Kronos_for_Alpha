@@ -13,7 +13,7 @@
   <use_cases>
     <use_case id="UC-1">Fine-tune Kronos-small on MOEX 21-asset data (CE loss on discrete tokens)</use_case>
     <use_case id="UC-2">Autoregressive inference: Monte Carlo sampling (T=0.6, N=4-5) → OHLCV paths</use_case>
-    <use_case id="UC-3">Signal generation: 7 signal families (atoms, ICT, volatility, VWAP, fractal, divergence, bars)</use_case>
+    <use_case id="UC-3">Signal generation: 8 signal families (atoms, bollinger, ICT, volatility, VWAP, fractal, divergence, bars)</use_case>
     <use_case id="UC-4">Strategy execution: 8 strategies (vanilla + BB/OB/VWAP/volatility filters) via shared engine</use_case>
     <use_case id="UC-5">Walk-forward validation: non-overlapping windows (step=pred_len=6), strict temporal split</use_case>
     <use_case id="UC-6">Calibration: 4-pass hyperparameter sweep (pred_len, T, consensus, TP/SL)</use_case>

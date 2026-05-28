@@ -123,6 +123,37 @@ def dsharpe_ratio(returns: np.ndarray, periods: int = PERIODS_ANN) -> float:
     return float(dd)
 
 
+def sortino_ratio(returns: np.ndarray, rf: float = 0.0, periods: int = PERIODS_ANN) -> float:
+    """Sortino ratio — Sharpe using only downside deviation."""
+    if len(returns) < 2:
+        return 0.0
+    excess = returns - rf / periods
+    downside = np.minimum(excess, 0.0)
+    downside_std = np.std(downside, ddof=1)
+    if downside_std < 1e-8:
+        return 0.0
+    return np.sqrt(periods) * np.mean(excess) / downside_std
+
+
+def avg_return(returns: np.ndarray, periods: int = PERIODS_ANN) -> float:
+    """Annualized average return."""
+    if len(returns) == 0:
+        return 0.0
+    return float(np.mean(returns) * periods)
+
+
+def n_trades(returns: np.ndarray) -> int:
+    """Number of non-zero return observations (trades)."""
+    return int(np.sum(returns != 0))
+
+
+def trade_pct(returns: np.ndarray) -> float:
+    """Fraction of periods with active trades."""
+    if len(returns) == 0:
+        return 0.0
+    return float(n_trades(returns) / len(returns))
+
+
 class StrategyMetrics:
     def __init__(
         self,

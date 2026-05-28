@@ -32,7 +32,21 @@ Strategy evaluation (from `src/evaluation/metrics.py`):
 
 Quality gates (thresholds in `config/global.yaml §quality_gates`):
   P0 tokenizer, P1 fine-tune, P2 backtest
-See: `config/global.yaml`, `docs/verification-plan.xml`
+See: `config/global.yaml`, `docs/verification-plan.xml`, `docs/requirements.xml §success_criteria`
+
+## MODULE CHANGE CHECKLIST
+When adding or modifying a module (new strategy, new signal, new pipeline step),
+update ALL of these or `grace lint` will flag the mismatch:
+
+1. **Code** — `src/<layer>/<module>.py` + update `__init__.py`
+2. **Config** — `config/global.yaml` (if new parameters needed)
+3. **Contract** — `docs/module-contracts.md` (M-XXX: purpose, input, output, guarantees, CLI)
+4. **Plan** — `docs/development-plan.xml` `<module-registry>` (add `<M-XXX></M-XXX>`)
+5. **Graph** — `docs/knowledge-graph.xml` `<module-registry>` (add `<M-XXX></M-XXX>`)
+6. **Verification** — `docs/verification-plan.xml` (add V-M-XXX entry if the module has quality gates)
+7. **Signals catalog** — `src/signals/__init__.py` (if adding a new signal family)
+8. **Module table** — `AGENTS.md` M-XXX table (update status/file)
+9. **Verify** — `ruff check && grace lint --profile standard`
 
 ## DEVELOPMENT PRINCIPLES
 1. **Contract-first**: define M-XXX I/O in `module-contracts.md` before implementing
@@ -82,6 +96,7 @@ grep "GRACE"         → docs/                                (GRACE XML artifac
 | M-BACKTEST | src/evaluation/backtest.py | ❌ future |
 | M-METRICS | src/evaluation/metrics.py | ✅ ready |
 | M-CONFIG | config/global.yaml | ✅ ready |
+| M-CALIBRATE | src/evaluation/calibrate.py | ✅ ready |
 | M-INFRA | — | ❌ future |
 | M-DOCS | docs/ | ✅ ready |
 | M-CI | .github/workflows/ | ❌ future |
@@ -198,7 +213,3 @@ See `docs/conventions/commit.md` for full field semantics, security rules, and e
 - **Walk-forward split**: train 2023→2025, val 2025-02→2025-09, test 2025-09→2026-05
 - **CLI, not MCP**: batch operations, fire-and-forget. CLI via bash tool
 - **GRACE integration**: XML artifacts in `docs/`, semantic markers, grace lint
-
-## Project Goal
-
-Fine-tune Kronos-small (VQ-VAE tokenizer + Transformer predictor, CE loss) on MOEX 21 assets for cross-sectional alpha.
