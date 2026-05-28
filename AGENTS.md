@@ -103,7 +103,7 @@ M-BACKTEST     src/evaluation/backtest.py   Cross-sectional (top-3 long, bot-2 s
 
 | File | When |
 |---|---|
-| `docs/architecture.md` | Understand architecture, why Kronos, why not Mamba |
+| `docs/architecture.md` | Understand Kronos architecture and pipeline design |
 | `docs/conventions/cli.md` | Creating or modifying a CLI module |
 | `docs/module-contracts.md` | Learn module contract (M-XXX → input/output/guarantees) |
 | `docs/conventions/commit.md` | Making a commit — format spec |
@@ -137,7 +137,7 @@ See `docs/conventions/commit.md` for full field semantics, security rules, and e
 
 ## Key Decisions
 
-- **Kronos-small** (not FinMamba v2): MSE — mean collapse (Sharpe -14). CE on discrete tokens avoids this
+- **Kronos-small**: CE on discrete tokens avoids mean collapse and produces distributional predictions
 - **21 asset** (20 stocks + IMOEX): more diversity → stronger cross-sectional z-score
 - **One model, 21 assets**: per-window z-score removes price level. No asset-ID embedding
 - **Tokenizer frozen**: Phase 0 quality gate validates KronosTokenizer on MOEX data first

@@ -1,56 +1,13 @@
-# PR_Mamba → Kronos Pivot: Cognitive Engineering Artifact
+# Kronos Architecture for MOEX Alpha
 
 > **Target**: Cross-sectional alpha model on MOEX top-21 liquid assets.  
-> **Purpose**: Single source of truth for the pivot from FinMamba v2 to Kronos fine-tune.  
+> **Purpose**: Document the complete Kronos fine-tune pipeline architecture for MOEX (Moscow Exchange) 21-asset alpha discovery.
 > **Readers**: Developer implementing the plan.  
 > **Notation**: `(B,T,6)→(B,T)→2×int64` = shape flow. `[§1.2]` = cross-reference to Layer.  
 
 ---
 
-## L0: SITUATION & DIAGNOSIS
-
-> **Greenfield note**: This plan maps to ZERO existing code in this repository. All current code (FinMamba, MSE loss, engineered features) is superseded. The Kronos fine-tune path is a new codebase within `src/`. Existing `backtest_cs.py`(portfolio PnL), `metrics.py`, `moex_fetcher.py` are reusable. All model code is new.
-
-### What We Tried
-
-| Version | Approach | Best Result | Root Failure |
-|---------|----------|-------------|--------------|
-| **v1** | Mamba-2, 4 OHLCV features, no TF, `h[:,-1,:]` | Sharpe −163 | Untrained position, too few features |
-| **v2** | Mamba-2, 31 engineered features, teacher forcing, MSE on log return | **Sharpe −14, WR 43%, MaxDD −53%** (after all bug fixes) | **MSE on noisy continuous target → mean regression collapse** |
-
-### Root Cause Hierarchy
-
-```
-┌─── ROOT CAUSE ───────────────────────────────────────────────────────┐
-│ MSE on noisy log return (μ≈0, σ≈0.006) → optimal prediction = E[y]≈0 │
-│ The model learns to predict the MEAN, which is zero.                  │
-│ CE on discrete tokens would learn the DISTRIBUTION.                  │
-└──────────────────────────────────────────────────────────────────────┘
-         │
-         ├── ENABLING BUGS (inflated/deflated backtest metrics) ──────
-         │   [a] Position 255 masked (offset=6): backtest used untrained output
-         │   [b] ret_1/5/20 were FORWARD returns (ln(C[t+N]/C[t])) — lookahead
-         │   [c] ADR used future bars (max(h[i:i+50]) at bar 0) — lookahead
-         │   [d] PnL compounding (equity × (1+pnl) per position) — 5× multiplication
-         │   [e] z-score μ,σ computed on entire dataset — test stats leak
-         │   ↳ All [a-e] FIXED. Remaining negative Sharpe is REAL.
-         │
-         └── DESIGN FLAWS (why architecture was wrong even after fixes) ──────
-              [f] 31 engineered features ≈ noisy transforms of raw OHLCV, no new info
-              [g] Single scalar output → model has no way to express uncertainty
-              [h] MSE = convex loss on non-convex problem (market can go up OR down)
-```
-
-### Why Kronos Is The Answer
-
-Kronos solves [f] [g] [h] simultaneously:
-- **[f]**: Raw OHLCV → VQ-VAE tokenizer learns latent representation automatically
-- **[g]**: Discrete 1024-class token prediction → distributional output (30% up, 25% down, 45% flat)
-- **[h]**: Cross-Entropy = proper scoring rule for categorical distribution → no mean collapse
-
----
-
-## L1: KRONOS ARCHITECTURE & WHY IT WINS
+## L1: KRONOS ARCHITECTURE
 
 ### 1.1 Tokenizer (VQ-VAE Autoencoder)
 
@@ -163,22 +120,7 @@ pred_bars = pred_bars.mean(axis=1)  # average over MC samples
 
 **Sampling**: `sample_from_logits` with T=0.6 (softening), top_p=0.9 (nucleus), top_k=0 (disabled). Non-deterministic → each MC path is a possible market scenario.
 
-### 1.4 Comparison: Why Kronos Succeeds Where FinMamba Failed
-
-| Dimension | FinMamba v2 | Kronos | Impact |
-|-----------|------------|--------|--------|
-| **Input** | 31 engineered features (RSI, MFI, BB, etc.) | Raw OHLCV+Amount (6 dims) → VQ tokens | Kronos learns representation; FinMamba given noisy transforms |
-| **Target** | Single scalar (log return, continuous) | 2 discrete tokens per bar (s1∈1024, s2∈1024) | Kronos predicts bar SHAPE, not just direction |
-| **Loss** | MSE = E[y] → 0 collapse | CE(s1)+CE(s2) = proper scoring for distribution | CE preserves multi-modality (up ⊕ down ⊕ flat) |
-| **Output** | Deterministic point estimate | Probabilistic: 1024-way classification per token | Can express "30% chance of up, 25% down" |
-| **Teacher Forcing** | 256 positions, 6 masked (offset=6) | All L positions, shift by 1, no masking | Full utilization of training signal |
-| **Inference** | Single forward pass, no sampling | Autoregressive + temperature sampling + MC paths | Robustness via ensemble of scenarios |
-| **Uncertainty** | None (single number) | Distribution over OHLCV bars | Can detect regime change (high entropy in predictions) |
-| **Params** | 3.6M (8 Mamba2 layers) | 4.1M (mini) / 24.7M (small) | Comparable scale |
-
-**Core insight**: Financial returns are fundamentally multi-modal (market can go up OR down from the same pattern). MSE averages these modes into zero. CE preserves the distribution, allowing the model to be useful even when uncertain — it tells you HOW uncertain it is.
-
-### 1.5 Input Data: OHLCV → 6 Dimensions
+### 1.4 Input Data: OHLCV → 6 Dimensions
 
 > **Resolution note**: Kronos tokenizer was trained on ALI09988 **5-min** bars. MOEX minimum is **10-min** bars. This means each bar encodes 2× the duration — potentially LESS noise (stronger trends, fewer false reversals) but coarser microstructure. Empirically this should HELP prediction quality (higher SNR per bar). If performance is poor, test with 5-min data via MOEX `marketdata` engine (supports `interval=5`).
 
@@ -228,7 +170,6 @@ Kronos expects 6 columns: `open, high, low, close, volume, amount`.
 │   → Retrain tokenizer on MOEX (see §2.2)                        │
 │                                                                │
 │ Research appendix (NOT active path):                            │
-│   → Replace Transformer with Mamba2 (Mamba-VQ)                  │
 │   → Ensemble with regime-specific heads                         │
 │   → Multi-scale prediction (1h + 1d + 1w)                       │
 └────────────────────────────────────────────────────────────────┘
@@ -258,7 +199,7 @@ MOEX ISS API (2023-01-01 → 2026-05-01)
         │
         ├── 21 tickers (stocks) + IMOEX (index)
         │   Selection: top-21 by MOEX liquidity, all sectors
-        │   Full list: see §1.5 lot_size table
+        │   Full list: see §1.4 lot_size table
         │
         ├── Fetch: 10-min candles, columns=begin,open,high,low,close,volume
         │   IMOEX endpoint: /iss/engines/stock/markets/index/securities/IMOEX/candles
@@ -282,7 +223,7 @@ MOEX ISS API (2023-01-01 → 2026-05-01)
         │   ├── Train: 2023-01 → 2025-02  (~26 months, ~57k bars/asset)
         │   ├── Val:   2025-02 → 2025-09  (~7 months, ~15k bars/asset)
         │   └── Test:  2025-09 → 2026-05  (~7 months, ~15k bars/asset)
-        │   └── WHY walk-forward: single split overfitted in v2, OOS = more honest
+        │   └── WHY walk-forward: single split overfitted in prior experiments, OOS = more honest
         │
         └── Tokenize: KronosTokenizer.encode(ohlcv_6d, half=True) → (s1_ids, s2_ids)
             └── Save: data/v3/{ticker}/tokens_{split}.npy (2 × T int64)
@@ -421,7 +362,7 @@ if val_ce > best_val_ce for 5 consecutive eval rounds:
 
 **Checkpoint resume protocol**:
 ```
-Volume:  finmamba-models  (Modal persistent volume)
+Volume:  kronos-checkpoints  (Modal persistent volume)
 Path:    /checkpoints/kronos_moex/
 Files:
   kronos_moex_epoch_N.pt     — every 3 epochs (optimizer state included)
@@ -532,34 +473,9 @@ Total:                < 0.5 GB — T4 is overkill for inference
 
 ---
 
-## APPENDIX A: FinMamba v1 → v2 Post-Mortem
+## APPENDIX A: Future Research
 
-| # | Bug | Root Cause | Symptom | Fix | Honest Result |
-|---|-----|------------|---------|-----|---------------|
-| 1 | `h[:, -1, :]` in v1 | Only last hidden state used | 1 prediction per window | Teacher forcing on all positions | 3.9M examples/epoch |
-| 2 | Position 255 masked | offset=6; last 6 pos untrained | Backtest used garbage | Fixed offset alignment [L0 row a] | Position 249 still ≠ forward |
-| 3 | ret_1/5/20 forward | `ln(C[t+N]/C[t])` lookahead | Model saw future as feature | Backward `ln(C[t]/C[t-N])` | Fixed |
-| 4 | ADR progressive | `max(h[i:i+50])` at bar 0 | Bar 0 "knew" future bars | `np.maximum.accumulate` | Fixed |
-| 5 | PnL compounding | `equity*(1+pnl)` per position | 5× multiplication | Portfolio mark-to-market | Fixed |
-| 6 | z-score global | μ,σ computed on full array | Test stats leaked to train | Per-window normalization | Fixed |
-| 7 | 31 features weak | RSI,MFI,BB ≈ transforms of OHLCV | No new information, noise | Raw OHLCV via VQ tokenizer | Kronos path |
-| **R** | **MSE on log return** | **Convex loss → E[y]≈0** | **Sharpe −14 after all fixes** | **CE on discrete tokens** | **Kronos path** |
-
-Bugs 1-6 FIXED. Bug 7 + Root Cause R → architectural pivot required. All honest backtests after fixing bugs 1-6 still show negative Sharpe.
-
----
-
-## APPENDIX B: Future Research (NOT active strategy)
-
-### B.1 Mamba-VQ
-
-Replace Transformer backbone in Kronos predictor with Mamba-2 SSM. Theoretical advantages:
-- Faster inference (linear vs quadratic attention)
-- Better long-range dependencies (2048+ context)
-
-**Prerequisites**: Kronos baseline MUST show alpha (Sharpe ≥ 0.5) before investing in Mamba-VQ. If even Transformer (proven) fails to find signal on MOEX, Mamba won't either.
-
-### B.2 Multi-Scale Prediction
+### A.1 Multi-Scale Prediction
 
 Train model to predict simultaneously:
 - 6 bars (1 hour) — short-term alpha
@@ -568,7 +484,7 @@ Train model to predict simultaneously:
 
 Multi-head output, weighted CE loss by horizon.
 
-### B.3 Ensemble with Regime Detection
+### A.2 Ensemble with Regime Detection
 
 Online regime classifier (volatility, trend, correlation) → condition prediction on regime. Fine-tune regime-specific prediction heads (NOT separate models — single model with conditional heads).
 

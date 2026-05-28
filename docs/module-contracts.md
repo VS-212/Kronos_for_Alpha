@@ -102,7 +102,7 @@ Status: ❌ future
 | Guarantees | Checkpoint resume (every 3 epochs + heartbeat every 100 steps), Early stop (val CE plateau: Δ ≤ 0.001 for 5 evals) |
 | Execution | `modal run src/core/kronos/fine_tune.py` (A100 40GB, timeout 8h) |
 | VRAM | ~10–12 GB (batch=12, bf16, grad_accum=2 → effective batch=24) |
-| Known failures | See `docs/operations/failures.md` (13 entries): CUDNN not compiled, OOM, timeout, HF auth, stale image, checkpoint collision, ephemeral disk full |
+| Known failures | See `docs/operations/failures.md` (11 entries): CUDNN not compiled, OOM, timeout, HF auth, stale image, checkpoint collision, ephemeral disk full |
 | CLI | `python src/core/kronos/fine_tune.py --resume kronos_moex_best.pt` |
 | Train config | lr=1e-5, scheduler=cosine, weight_decay=0.1, grad_clip=3.0, epochs=30, precision=bf16 |
 | Checkpoint files | `kronos_moex_epoch_N.pt` (every 3 epochs), `kronos_moex_best.pt` (best val CE), `kronos_moex_latest.pt` (heartbeat), `history.json` (loss log) |

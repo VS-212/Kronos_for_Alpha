@@ -1,0 +1,94 @@
+# Sweep Master Configuration
+# Template: adapt to your instrument and strategy families
+#
+# Usage:
+#   python -m templates.sweeps.sweep_master --config templates/sweeps/sweep_config.yaml
+#
+# Grid modes:
+#   - 1D sweep:  pass a list → one value swept at a time
+#   - 2D/3D+:   pass multiple lists → Cartesian product of all combinations
+#   - Baseline:  omit `grid`, pass only `fixed` → single run with fixed params
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+
+# Path to pre-computed prediction samples (from M-PREDICT output)
+samples_path: "/tmp/opencode/SBER_samples_pl6_sc5.parquet"
+
+# Inference parameters used when generating samples (must match M-PREDICT)
+samples_config:
+  pred_len: 6
+  sample_count: 5
+  tp_q: 0.90
+  sl_q: 0.10
+
+# ── Time Periods ──────────────────────────────────────────────────────────────
+# Year-string filter on the "month" column (YYYY-MM → str[:4])
+
+train_period: "2025"
+test_period: "2026"
+
+# ── Strategies to Sweep ───────────────────────────────────────────────────────
+# Each entry: name, import_path, function, optional fixed params, optional grid
+#
+# The strategy function must accept:
+#   (df, mamba, pred_len, sample_count, tp_q, sl_q, **kwargs)
+#
+# See src/strategies/ for available strategy modules.
+
+strategies:
+
+  # ─ Example 1: 1D sweep — Bollinger Band standard deviation
+  - name: "S01_BB_Consensus"
+    import_path: "src.strategies.s01_bb"
+    function: "run"
+    fixed:
+      consensus_threshold: 0.6
+    grid:
+      # Sweeps bb_std at [1.5, 2.0, 2.5, 3.0]
+      # Actually: bb_std is not a direct param of s01_bb.run — it uses
+      # mamba's pre-computed BB.  This is illustrative; wire your own
+      # strategy param that is actually consumed by the strategy.
+      bb_std: [1.5, 2.0, 2.5, 3.0]
+
+  # ─ Example 2: 2D Cartesian sweep — Order Block lookback × move_threshold
+  - name: "S20_OrderBlock"
+    import_path: "src.strategies.s20_ob"
+    function: "run"
+    grid:
+      lookback: [24, 48, 96]
+      move_threshold: [0.002, 0.005, 0.01]
+      # Cartesian product: 3 × 3 = 9 configs
+
+  # ─ Example 3: 3D sweep — OB lookback × move_threshold × max_age
+  - name: "S20_OB_3D"
+    import_path: "src.strategies.s20_ob"
+    function: "run"
+    fixed:
+      consensus_threshold: 0.6
+    grid:
+      lookback: [48, 96]
+      move_threshold: [0.0015, 0.005]
+      max_age: [12, 24]
+      # 2 × 2 × 2 = 8 configs
+
+  # ─ Example 4: Baseline — fixed params only (no grid, no sweep)
+  - name: "Vanilla_Consensus"
+    import_path: "src.strategies.vanilla"
+    function: "run"
+    fixed:
+      consensus_threshold: 0.6
+
+# ── Defaults — ────────────────────────────────────────────────────────────────
+# Applied to ALL strategies above (merged before per-strategy fixed & grid).
+# Per-strategy `fixed` overrides defaults.  Grid params override both.
+
+defaults:
+  consensus_threshold: 0.6
+  max_age: 24
+
+# ── Output ────────────────────────────────────────────────────────────────────
+
+output:
+  print_table: true            # Print formatted 140-char comparison table
+  save_json: true              # Save results to JSON file
+  json_path: "sweep_results.json"

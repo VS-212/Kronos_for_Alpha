@@ -6,28 +6,6 @@
 
 ---
 
-## RuntimeError: "no kernel available"
-
-Симптом (точная строка из лога):
-```
-RuntimeError: cutlassF::kernel — no kernel available
-```
-
-Причина: несовместимость CUDA toolkit и mamba-ssm.
-- mamba-ssm собран под конкретную версию CUDA
-- Modal image указывает другую CUDA
-
-Фикс:
-1. Проверить `alpha/infra/image.py`:
-   - `nvidia/cuda:12.4.0-devel-ubuntu22.04` (или `12.4.1`)
-   - `RUN pip install mamba-ssm==2.3.0`
-2. Убедиться что версия CUDA в base image совпадает с той, под которую собран mamba-ssm
-3. `modal image rebuild`
-
-Reference: https://github.com/state-spaces/mamba/issues/XXX
-
----
-
 ## ModalTimeoutError: Function runs longer than configured timeout
 
 Симптом:
@@ -59,38 +37,14 @@ FileNotFoundError: [Errno 2] No such file or directory: '/checkpoints/kronos_moe
 Фикс:
 1. Проверить `image.py`:
 ```python
-volume = modal.Volume.from_name("finmamba-models", create_if_missing=True)
+volume = modal.Volume.from_name("kronos-checkpoints", create_if_missing=True)
 @app.function(volumes={"/checkpoints": volume})
 ```
 2. Убедиться что директория создаётся при старте:
 ```python
 os.makedirs("/checkpoints/kronos_moex", exist_ok=True)
 ```
-3. Если volume stale: `modal volume reload finmamba-models`
-
----
-
-## Image build failed: package installation
-
-Симптом:
-```
-# pip install mamba-ssm
-ERROR: No matching distribution found for mamba-ssm
-```
-
-Причина: mamba-ssm требует конкретный wheel под CUDA/PyTorch/Triton.
-
-Фикс:
-1. Фиксировать версии в `image.py`:
-```python
-image = (
-    modal.Image.from_registry("nvidia/cuda:12.4.0-devel-ubuntu22.04")
-    .pip_install("torch==2.4.0")
-    .pip_install("mamba-ssm==2.3.0")
-)
-```
-2. Не использовать `latest` теги
-3. Если ошибка остаётся — собрать wheel вручную (см. https://github.com/state-spaces/mamba)
+3. Если volume stale: `modal volume reload kronos-checkpoints`
 
 ---
 
@@ -144,8 +98,6 @@ app = modal.App("kronos-train")
 
 ---
 
----
-
 ## pip install timeout (image build)
 
 Симптом:
@@ -154,12 +106,11 @@ WARNING: Retrying (Retry(total=4, ...)) after connection broken
 ReadTimeoutError: HTTPSConnectionPool: Read timed out.
 ```
 
-Причина: загрузка torch/mamba-ssm (2-4GB) через pip падает по таймауту.
+Причина: загрузка torch (2-4GB) через pip падает по таймауту.
 
 Фикс:
 1. Увеличить pip default timeout: `.pip_install("torch==2.4.0", env={"PIP_DEFAULT_TIMEOUT": "300"})`  
-2. Разделить установку: сначала torch (c --index-url), потом mamba-ssm
-3. Если ошибка повторяется — `modal image rebuild --force` (сбросить кэш)
+2. Если ошибка повторяется — `modal image rebuild --force` (сбросить кэш)
 
 ---
 
@@ -259,7 +210,7 @@ OSError: [Errno 28] No space left on device
 При падении Modal job:
 1. `modal logs kronos-train` — последние логи
 2. `modal app list` — статус всех jobs
-3. `modal volume ls finmamba-models` — проверить чекпоинты
+3. `modal volume ls kronos-checkpoints` — проверить чекпоинты
 4. Python `traceback.format_exc()` — exact symptom для этого файла
 
 ---

@@ -7,7 +7,7 @@ COMMIT_MSG=$(cat "$1")
 
 # Rule 1: First line must match: <type>(M-XXX): <description>
 FIRST_LINE=$(head -n 1 "$1")
-PATTERN='^(feat|fix|refactor|docs|test|ci|chore|perf|revert)\(M-[A-Z]+(-[A-Z0-9]+)*\): .+'
+PATTERN='^(feat|fix|refactor|docs|test|ci|chore|perf|revert)\(M-[A-Z]+(-[A-Z0-9]+)*(,M-[A-Z]+(-[A-Z0-9]+)*)*\): .+'
 
 if ! echo "$FIRST_LINE" | grep -qE "$PATTERN"; then
     echo "ERROR: Commit message first line must match: <type>(M-XXX): <description>"

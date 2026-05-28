@@ -65,7 +65,7 @@
 
 ## Leakage Prevention
 
-- BB uses only data BEFORE pred_ts (mask: `mamba.index < pred_ts`)
+- BB uses only data BEFORE pred_ts (mask: `df.index < pred_ts`)
 - Samples are stochastic predictions, not actuals (5 samples × 6 steps)
 - Windows are non-overlapping (step == pred_len == 6)
 - Train/Test temporal split: 2025 train, 2026 test
