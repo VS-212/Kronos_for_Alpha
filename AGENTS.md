@@ -206,7 +206,7 @@ See `docs/conventions/commit.md` for full field semantics, security rules, and e
 
 ## Key Decisions
 
-- **Kronos-small**: CE on discrete tokens avoids mean collapse and produces distributional predictions
+- **Kronos-small**: CE on discrete tokens avoids mean collapse and produces distributional predictions. ⚠ Tokenizer differs from mini: mini → `Kronos-Tokenizer-2k`, small → `Kronos-Tokenizer-base`
 - **21 asset** (20 stocks + IMOEX): more diversity → stronger cross-sectional z-score
 - **One model, 21 assets**: per-window z-score removes price level. No asset-ID embedding
 - **Tokenizer frozen**: Phase 0 quality gate validates KronosTokenizer on MOEX data first

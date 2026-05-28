@@ -70,8 +70,10 @@ model:
   params: 24_700_000                  # (alpha) total parameters
 
 # ── Tokenizer (VQ-VAE, M-TOKENIZE, Phase 0) ─────────────────────────────────
+# ⚠ Kronos-mini uses Tokenizer-2k, Kronos-small uses Tokenizer-base
 tokenizer:
-  source: "NeoQuasar/Kronos-Tokenizer-2k"
+  source: "NeoQuasar/Kronos-Tokenizer-2k"    # (artifact) for Kronos-mini inference
+  alt: "NeoQuasar/Kronos-Tokenizer-base"      # (alpha) for Kronos-small fine-tune
   codebook_vocab: 1024
   input_dim: 6                        # OHLCV + amount
   codebook_heads: 8
