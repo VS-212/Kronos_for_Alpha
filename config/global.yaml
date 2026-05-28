@@ -1,0 +1,271 @@
+# Kronos Alpha — Unified Configuration
+# Single source of truth for all pipeline modules
+# Module IDs (M-XXX) map to section keys below
+# Merged: kronos-alpha (structure, tickers, quality gates) + kronos-artifact (model, strategy params, calibration)
+
+mode: "kronos"
+version: "3.0.0"
+
+# ── Universe ─────────────────────────────────────────────────────────────────
+tickers:
+  stocks:
+    - SBER    # lot=10
+    - GAZP    # lot=10
+    - LKOH    # lot=1
+    - ALRS    # lot=10
+    - ROSN    # lot=10
+    - NVTK    # lot=10
+    - PLZL    # lot=1
+    - GMKN    # lot=1
+    - TATN    # lot=1
+    - VTBR    # lot=1000
+    - CHMF    # lot=1
+    - NLMK    # lot=10
+    - MAGN    # lot=10
+    - AFLT    # lot=10
+    - FIVE    # lot=1
+    - MOEX    # lot=10
+    - TCST    # lot=1
+    - YNDX    # lot=1
+    - SNGS    # lot=100
+    - SNGSP   # lot=100
+  index:
+    - IMOEX
+
+lot_sizes:
+  SBER: 10
+  GAZP: 10
+  LKOH: 1
+  ALRS: 10
+  ROSN: 10
+  NVTK: 10
+  PLZL: 1
+  GMKN: 1
+  TATN: 1
+  VTBR: 1000
+  CHMF: 1
+  NLMK: 10
+  MAGN: 10
+  AFLT: 10
+  FIVE: 1
+  MOEX: 10
+  TCST: 1
+  YNDX: 1
+  SNGS: 100
+  SNGSP: 100
+
+board: TQBR                           # (artifact) MOEX main board
+
+# ── Model ────────────────────────────────────────────────────────────────────
+model:
+  name: "NeoQuasar/Kronos-mini"       # (artifact) default model, ready for inference
+  alt: "NeoQuasar/Kronos-small"       # (alpha) upgrade path, 24.7M params, Phase 1
+  tokenizer: "NeoQuasar/Kronos-Tokenizer-2k"
+  device: cuda                        # auto|cuda|cpu  (artifact)
+  context_length: 2048                # (artifact) Kronos-mini max context
+  dtype: float32
+  d_model: 832                        # (alpha) Kronos-small hidden dim
+  n_layers: 12                        # (alpha) transformer layers
+  n_heads: 16                         # (alpha) attention heads
+  params: 24_700_000                  # (alpha) total parameters
+
+# ── Tokenizer (VQ-VAE, M-TOKENIZE, Phase 0) ─────────────────────────────────
+tokenizer:
+  source: "NeoQuasar/Kronos-Tokenizer-2k"
+  codebook_vocab: 1024
+  input_dim: 6                        # OHLCV + amount
+  codebook_heads: 8
+  s1_bits: 10                         # (alpha) stage-1 codebook bits
+  s2_bits: 10                         # (alpha) stage-2 codebook bits
+  d_model: 256                        # (alpha) encoder hidden dim
+  encoder_layers: 4                   # (alpha) encoder depth
+  frozen: true                        # (alpha) Phase 1: frozen; Phase 3: may retrain
+
+  quality_gates:                      # (alpha) must pass before Phase 1
+    codebook_util: 200                # minimum unique s1+s2 codes (out of 1024)
+    entropy: 5.0                      # bits (out of 10 max)
+    recon_mse: 0.01                   # normalized OHLCV MSE
+    per_asset_codes: 50               # minimum codes per ticker
+
+# ── Data ─────────────────────────────────────────────────────────────────────
+data:
+  source: MOEX ISS                    # (artifact) MOEX Information & Statistical Server
+  board: TQBR
+  interval: 10                        # minutes
+  lookback: 506                       # bars of context
+  pred_len: 6                         # default prediction horizon
+  session_start: "10:00"              # MSK main session open (alpha)
+  session_end: "18:40"                # MSK main session close (alpha)
+  bars_per_day: 52                    # (alpha) 10-min bars per session
+  features: ["open", "high", "low", "close", "volume", "amount"]  # (alpha)
+  d_input: 6                          # (alpha) feature dimension
+
+  splits:
+    train_start: "2023-01-01"         # (alpha) ~27k bars/asset
+    train_end: "2025-02-01"
+    val_start: "2025-02-01"
+    val_end: "2025-09-01"             # (alpha) ~7.6k bars/asset
+    test_start: "2025-09-01"
+    test_end: "2026-05-01"            # (alpha) ~8.7k bars/asset
+
+  preprocessing:
+    normalize: per-window-zscore      # μ,σ over lookback window, clip [-5,5]; no global leak
+    amount_column: true               # close * volume * lot_size
+    dividend_adjust: false            # Phase 2+
+    session_filter: true              # strip non-main-session bars (alpha)
+    min_bars: 500
+    max_gap_minutes: 30
+    norm_clip: 5.0                    # (alpha) z-score clipping
+
+  cache:
+    format: parquet
+    dir: data/cache/
+
+# ── Dataset (M-DATASET) ──────────────────────────────────────────────────────
+dataset:
+  L: 512                              # (alpha) context window (bars)
+  pred_len: 6                         # (alpha) predict this many bars
+  stride: 8                           # (alpha) training window stride
+  shift: 1                            # (alpha) teacher forcing shift (next token)
+
+# ── Training (M-FINE-TUNE, Phase 1) ──────────────────────────────────────────
+training:
+  batch_size: 12                      # (alpha)
+  grad_accum: 2                       # (alpha) effective batch = 24
+  lr: 1e-5                            # (alpha)
+  weight_decay: 0.1                   # (alpha)
+  grad_clip: 3.0                      # (alpha)
+  scheduler: cosine                   # (alpha)
+  epochs: 30                          # (alpha)
+  precision: bf16                     # (alpha) bfloat16 on A100
+  gpu: A100                           # (alpha) Modal GPU
+  timeout: 28800                      # (alpha) seconds (8h)
+  checkpoint:
+    every_epochs: 3                   # (alpha)
+    heartbeat_steps: 100              # (alpha)
+    name: "kronos_moex"               # (alpha)
+
+# ── Inference (M-PREDICT) ────────────────────────────────────────────────────
+inference:
+  lookback: 506                       # bars of context
+  pred_len: 6                         # bars to generate
+  temperature: 0.6
+  top_p: 0.9
+  top_k: 50                           # (artifact) enabled for diversity
+  sample_count: 5                     # Monte Carlo paths (artifact: ensemble)
+  batch_size: 16
+  sub_batch_size: 4                   # OOM-safe sub-batch
+  session_filter: "10:00-18:45"
+  pred_lens: [1, 3, 6, 12, 24]       # (artifact) ensemble horizons
+  gpu: T4                             # (alpha) Modal GPU for inference
+
+# ── Strategies (M-STRATEGY) ──────────────────────────────────────────────────
+strategies:
+  consensus:                          # (artifact) consensus filter
+    threshold: 0.6
+    bypass_on_consensus: true
+
+  tp_sl:                              # (artifact) take-profit / stop-loss modes
+    mode: quantile                    # quantile|atr|dispersion|fixed|flip
+    tp_quantile: 0.8
+    sl_quantile: 0.2
+    atr_multiplier: 1.5
+    max_hold_bars: 20
+    exit_on_flip: true
+
+  cross_sectional:                    # (alpha) top-N / bottom-N ranking
+    long: 3                           # top N assets to long
+    short: 2                          # bottom N assets to short
+    commission: 0.0003                # (alpha)
+    slippage: 0.0001                  # (alpha)
+
+  bollinger:                          # (artifact) Bollinger band strategy
+    period: 20
+    std_dev: 2.0
+
+  order_block:                        # (artifact) ICT order block detection
+    lookback: 50
+    max_age: 10
+    min_size_pct: 0.3
+
+  fvg:                                # (artifact) fair value gap
+    min_gap_pct: 0.1
+    max_age: 5
+
+  vwap:                               # (artifact) volume-weighted average price
+    anchor: daily
+    bands: [1.0, 2.0, 3.0]           # std dev bands
+
+# ── Backtest (M-BACKTEST) ────────────────────────────────────────────────────
+backtest:
+  strategy: "cross_sectional_top3_bot2"  # (alpha)
+  train_period: "2023-01-01_2025-02-01"  # (alpha) walk-forward train
+  test_period: "2025-02-01_2026-05-01"   # (alpha) walk-forward test
+  session_start: "10:00"                  # (alpha) MSK
+  last_entry: "18:10"                     # (alpha) 30 min before close
+  force_exit: "18:35"                     # (alpha) 5 min before session end
+  last_entry_buffer_candles: 5            # (artifact) min candles before close
+
+  walk_forward:
+    step: 6                               # bars, non-overlapping
+    min_windows: 100
+
+  metrics:
+    - sharpe
+    - max_drawdown
+    - win_rate
+    - profit_factor
+    - calmar
+    - sortino
+    - ic_rank
+    - direction_accuracy
+
+  quality_gates:                          # (alpha) must pass for model acceptance
+    sharpe_min: 0.5
+    win_rate_min: 0.52
+    max_dd_max: 0.25
+    psr_min: 0.7
+    ic_mean_min: 0.02
+
+# ── Calibration ──────────────────────────────────────────────────────────────
+calibration:
+  enabled: true                           # (artifact) sweep-based calibration
+  passes:
+    - name: pred_len_sweep
+      params: {pred_len: [1, 3, 6, 12, 24]}
+    - name: temperature_sweep
+      params: {temperature: [0.2, 0.4, 0.6, 0.8, 1.0], top_p: [0.7, 0.8, 0.9, 0.95]}
+    - name: consensus_sweep
+      params: {consensus_threshold: [0.0, 0.4, 0.6, 0.8, 1.0]}
+    - name: tpsl_sweep
+      params: {tp_quantile: [0.7, 0.75, 0.8, 0.85], sl_quantile: [0.15, 0.2, 0.25]}
+  n_random_windows: 500
+
+# ── Execution ────────────────────────────────────────────────────────────────
+execution:
+  timezone: "Europe/Moscow"               # (artifact)
+  force_session_close_exit: true          # (artifact)
+  input_base: data/v3/raw                 # (alpha)
+  manifest_dir: data/v3                   # (alpha)
+
+  gpu:
+    tokenize: [cpu, t4]                   # Phase 0
+    finetune: [a100]                      # Phase 1
+    predict: [t4]                         # Phase 2
+    backtest: [cpu]                       # Phase 2
+
+  modal:                                  # (alpha) Modal cloud config
+    image: kronos-finetune
+    finetune_timeout: 7200                # 2h
+    predict_timeout: 3600                 # 1h
+    volume: kronos-checkpoints
+
+# ── Monitoring ───────────────────────────────────────────────────────────────
+monitoring:
+  log_level: INFO
+  wandb:
+    enabled: false
+    project: kronos-alpha
+  checkpoint_freq: 100                    # steps
+  save_best: true
+  metric_for_best: sharpe

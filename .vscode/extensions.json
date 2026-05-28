@@ -1,0 +1,16 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "ms-python.mypy-type-checker",
+    "ms-toolsai.jupyter",
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml",
+    "github.copilot",
+    "github.copilot-chat",
+    "eamodio.gitlens",
+    "mechatroner.rainbow-csv",
+    "grapecity.gc-excelviewer",
+    "yzhang.markdown-all-in-one"
+  ]
+}

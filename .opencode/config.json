@@ -1,0 +1,47 @@
+{
+  "version": "0.1.0",
+  "name": "kronos-alpha",
+  "rules": {
+    "read_only_dirs": [
+      "~/.ssh",
+      "~/.config/opencode/permissions.json",
+      "/etc"
+    ],
+    "deny_commands": [
+      "git push --force",
+      "git push -f",
+      "git push origin main --force",
+      "rm -rf --no-preserve-root",
+      "chmod 777",
+      "curl.*\\.ssh",
+      "cat.*id_ed25519",
+      "cat.*id_rsa",
+      "cat.*\\.pem"
+    ],
+    "require_confirmation": [
+      "git push",
+      "pip install",
+      "modal deploy",
+      "modal run",
+      "huggingface-cli upload"
+    ],
+    "before_arch_change": [
+      "grep M-{MODULE} docs/grace/knowledge-graph.xml",
+      "grace lint --profile autonomous --path ."
+    ],
+    "before_code_change": [
+      "read docs/module-contracts.md",
+      "check docs/grace/knowledge-graph.xml for module dependencies"
+    ],
+    "commit_format": "feat|fix|refactor|docs|test|ci|chore|perf(M-XXX): description\n\nContract: ...\nVerified: ..."
+  },
+  "agent": {
+    "max_autonomous_cycles": 3,
+    "require_question_on_ambiguity": true,
+    "drift_protection": {
+      "enforce_contracts": true,
+      "check_coherence_before_execute": true,
+      "grace_lint_before_commit": true
+    }
+  }
+}

@@ -1,0 +1,530 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grace:operational-packets xmlns:grace="https://grace.ai/schema/operational-packets">
+  <project>Kronos for Alpha</project>
+  <revision>1.0</revision>
+  <date>2026-05-28</date>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- EXECUTION PACKET TEMPLATE                                           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <template id="execution-packet" name="Standard Module Execution">
+    <description>Every CLI module invocation must conform to this packet. Write to the filesystem only within declared write_scope. Read only from declared read_only_files. Resume from state_files if interrupted.</description>
+
+    <fields>
+      <field name="module" type="string" required="true" example="M-FETCH, M-TOKENIZE, M-FINE-TUNE">M-XXX module identifier from AGENTS.md namespace</field>
+      <field name="phase" type="int" required="true" example="0, 1, 2, 3">Pipeline phase: 0=tokenizer, 1=finetune, 2=inference+backtest, 3=iteration</field>
+      <field name="contract" type="string" required="true" example="[start, end] → [parquet files, manifest.json]">Input → Output contract from module-contracts.md</field>
+      <field name="write_scope_files" type="list[string]" required="true" example="data/v3/raw/, data/v3/raw/manifest.json">Directories/files this module may modify</field>
+      <field name="read_only_files" type="list[string]" required="true" example="config/global.yaml, src/data/fetcher.py">Files this module may read but never write</field>
+      <field name="state_files" type="list[string]" required="true" example="data/v3/raw/.progress.json">Resume checkpoint files (for --resume)</field>
+      <field name="max_retries" type="int" required="true" example="5">Max retries before hard failure, with exponential backoff 2^n × 2s</field>
+      <field name="stop_conditions" type="list[string]" required="true">Conditions that halt execution immediately</field>
+      <field name="expected_artifacts" type="list[artifact]" required="true">Files/dirs that must exist after successful completion</field>
+    </fields>
+
+    <!-- Concrete execution packets per module -->
+    <instance module="M-FETCH" phase="0" contract="--start {date} --end {date} → data/v3/raw/{ticker}.parquet × 21 + manifest.json">
+      <write_scope_files>
+        <path>data/v3/raw/*.parquet</path>
+        <path>data/v3/raw/manifest.json</path>
+        <path>data/v3/raw/.progress.json</path>
+      </write_scope_files>
+      <read_only_files>
+        <path>config/global.yaml</path>
+        <path>src/data/fetcher.py</path>
+        <path>src/data/base.py</path>
+        <path>src/data/cache.py</path>
+      </read_only_files>
+      <state_files>
+        <path>data/v3/raw/.progress.json</path>
+      </state_files>
+      <max_retries>5</max_retries>
+      <stop_conditions>
+        <condition>HTTP 429 rate-limit persistent after 5 retries</condition>
+        <condition>ConnectionError persistent after 5 retries</condition>
+        <condition>Manifest validation: missing ticker or empty data</condition>
+        <condition>All tickers returned < 50% of expected trading days (systemic API failure)</condition>
+      </stop_conditions>
+      <expected_artifacts>
+        <artifact path="data/v3/raw/{ticker}.parquet" count="21" description="OHLCV parquet, columns: timestamp, open, high, low, close, volume, amount" />
+        <artifact path="data/v3/raw/manifest.json" description="keys: ticker → {rows, start, end}" />
+      </expected_artifacts>
+    </instance>
+
+    <instance module="M-PREPROCESS" phase="0" contract="data/v3/raw/*.parquet + manifest.json → data/v3/processed/{ticker}_{split}.npy × 63 + manifest.json">
+      <write_scope_files>
+        <path>data/v3/processed/</path>
+        <path>data/v3/processed/manifest.json</path>
+      </write_scope_files>
+      <read_only_files>
+        <path>config/global.yaml</path>
+        <path>data/v3/raw/*.parquet</path>
+        <path>data/v3/raw/manifest.json</path>
+      </read_only_files>
+      <state_files>
+        <path>data/v3/processed/.progress.json</path>
+      </state_files>
+      <max_retries>3</max_retries>
+      <stop_conditions>
+        <condition>Missing ticker in input manifest → abort (do not skip)</condition>
+        <condition>NaN after normalization → check source data</condition>
+        <condition>Empty split → date range mismatch, check config/global.yaml splits</condition>
+        <condition>Session filter removes > 30% of bars → possible data corruption</condition>
+      </stop_conditions>
+      <expected_artifacts>
+        <artifact path="data/v3/processed/{ticker}_train.npy" count="21" description="(T, 6) float64, per-window z-score normalized" />
+        <artifact path="data/v3/processed/{ticker}_val.npy" count="21" />
+        <artifact path="data/v3/processed/{ticker}_test.npy" count="21" />
+        <artifact path="data/v3/processed/manifest.json" description="keys: ticker → {split: {rows, shape=(T,6), start, end}}" />
+      </expected_artifacts>
+    </instance>
+
+    <instance module="M-TOKENIZE" phase="0" contract="data/v3/processed/{ticker}_{split}.npy → data/v3/tokens/{ticker}_{split}.npy + manifest.json (with quality gates)">
+      <write_scope_files>
+        <path>data/v3/tokens/</path>
+        <path>data/v3/tokens/manifest.json</path>
+      </write_scope_files>
+      <read_only_files>
+        <path>config/global.yaml</path>
+        <path>data/v3/processed/*.npy</path>
+        <path>data/v3/processed/manifest.json</path>
+        <path>src/core/kronos/tokenizer.py</path>
+      </read_only_files>
+      <state_files>
+        <path>data/v3/tokens/.progress.json</path>
+      </state_files>
+      <max_retries>3</max_retries>
+      <stop_conditions>
+        <condition>Any quality gate FAILS (codebook_util < 200, entropy < 5.0, recon_mse > 0.01, per_asset_codes < 50) → stop, do NOT proceed to M-FINE-TUNE</condition>
+        <condition>Tokenizer download fails (HF auth — gated model)</condition>
+        <condition>CUDA OOM on T4 → fallback to CPU</condition>
+        <condition>Per-asset codes < 20 for any asset → remove from universe</condition>
+      </stop_conditions>
+      <expected_artifacts>
+        <artifact path="data/v3/tokens/{ticker}_train.npy" count="21" description="(T, 2) int64 — s1_ids, s2_ids" />
+        <artifact path="data/v3/tokens/{ticker}_val.npy" count="21" />
+        <artifact path="data/v3/tokens/{ticker}_test.npy" count="21" />
+        <artifact path="data/v3/tokens/manifest.json" description="keys: ticker → {split: {tokens, codebook_util, entropy, recon_mse, per_asset_unique_codes}}" />
+      </expected_artifacts>
+    </instance>
+
+    <instance module="M-FINE-TUNE" phase="1" contract="DataLoader (tokens) + Kronos-small → checkpoints/kronos_moex_best.pt + history.json">
+      <write_scope_files>
+        <path>checkpoints/kronos_moex/</path>
+        <path>checkpoints/kronos_moex/history.json</path>
+      </write_scope_files>
+      <read_only_files>
+        <path>config/global.yaml</path>
+        <path>data/v3/tokens/*.npy</path>
+        <path>data/v3/tokens/manifest.json</path>
+        <path>src/core/kronos/modules.py</path>
+        <path>src/core/kronos/model.py</path>
+        <path>src/core/kronos/tokenizer.py</path>
+        <path>src/core/kronos/fine_tune.py</path>
+      </read_only_files>
+      <state_files>
+        <path>checkpoints/kronos_moex/kronos_moex_latest.pt</path>
+        <path>checkpoints/kronos_moex/kronos_moex_epoch_N.pt</path>
+        <path>checkpoints/kronos_moex/history.json</path>
+      </state_files>
+      <max_retries>3</max_retries>
+      <stop_conditions>
+        <condition>Val CE > random_CE (10.0 for 1024-class) → model not learning</condition>
+        <condition>Train CE < Val CE - 0.5 → severe overfit (add dropout)</condition>
+        <condition>Val CE plateau: delta <= 0.001 for 5 consecutive evals → early stop</condition>
+        <condition>GPU OOM on A100 → reduce batch_size from 12 to 8</condition>
+        <condition>NaN in loss or gradients → check data for corrupt tokens</condition>
+        <condition>Modal spot preemption → heartbeat checkpoint auto-resume</condition>
+        <condition>Modal timeout (8h) → ensure checkpoint saves every 3 epochs</condition>
+      </stop_conditions>
+      <expected_artifacts>
+        <artifact path="checkpoints/kronos_moex/kronos_moex_best.pt" description="Best val CE weights + optimizer state" />
+        <artifact path="checkpoints/kronos_moex/kronos_moex_epoch_30.pt" description="Final epoch checkpoint" />
+        <artifact path="checkpoints/kronos_moex/kronos_moex_latest.pt" description="Heartbeat checkpoint (survives preemption)" />
+        <artifact path="checkpoints/kronos_moex/history.json" description="keys: {best_epoch, train_ce, val_ce, steps, epochs_completed}" />
+      </expected_artifacts>
+    </instance>
+
+    <instance module="M-PREDICT" phase="2" contract="data/v3/processed/{ticker}_{split}.npy + best.pt + tokenizer → data/v3/predictions/{ticker}_{split}.npy + manifest.json">
+      <write_scope_files>
+        <path>data/v3/predictions/</path>
+        <path>data/v3/predictions/manifest.json</path>
+      </write_scope_files>
+      <read_only_files>
+        <path>config/global.yaml</path>
+        <path>data/v3/processed/*.npy</path>
+        <path>checkpoints/kronos_moex/kronos_moex_best.pt</path>
+        <path>src/core/kronos/predictor.py</path>
+      </read_only_files>
+      <state_files>
+        <path>data/v3/predictions/.progress.json</path>
+      </state_files>
+      <max_retries>3</max_retries>
+      <stop_conditions>
+        <condition>Checkpoint file not found → run M-FINE-TUNE first</condition>
+        <condition>Tokenizer not loaded (HF auth)</condition>
+        <condition>CUDA OOM on T4 → use CPU or reduce sub_batch_size to 2</condition>
+        <condition>All predictions identical (zero std) → tokenizer/model failure</condition>
+      </stop_conditions>
+      <expected_artifacts>
+        <artifact path="data/v3/predictions/{ticker}_train.npy" count="21" description="(T, pred_len, 6) float64 — MC-averaged OHLCV predictions" />
+        <artifact path="data/v3/predictions/{ticker}_val.npy" count="21" />
+        <artifact path="data/v3/predictions/{ticker}_test.npy" count="21" />
+        <artifact path="data/v3/predictions/manifest.json" description="keys: ticker → {split: {shape=(T,6), sample_count}}" />
+      </expected_artifacts>
+    </instance>
+
+    <instance module="M-BACKTEST" phase="2" contract="predictions/*.npy + raw/*.parquet → report.json + equity_curve.npy">
+      <write_scope_files>
+        <path>data/v3/results/</path>
+        <path>data/v3/results/report.json</path>
+        <path>data/v3/results/equity_curve.npy</path>
+        <path>data/v3/results/trades.parquet</path>
+      </write_scope_files>
+      <read_only_files>
+        <path>config/global.yaml</path>
+        <path>data/v3/predictions/*.npy</path>
+        <path>data/v3/predictions/manifest.json</path>
+        <path>data/v3/raw/*.parquet</path>
+        <path>src/evaluation/backtest.py</path>
+        <path>src/evaluation/metrics.py</path>
+      </read_only_files>
+      <state_files>
+        <path>data/v3/results/.progress.json</path>
+      </state_files>
+      <max_retries>1</max_retries>
+      <stop_conditions>
+        <condition>Not enough tickers for top-3/bot-2 ranking → reduce N or check data</condition>
+        <condition>All predictions correlated → no spread → check M-TOKENIZE per-asset codes</condition>
+        <condition>Sharpe < 0.5 → metrics gate FAIL → go to Phase 3 iteration</condition>
+        <condition>Win Rate < 0.45 → check prediction bias</condition>
+        <condition>MaxDD > 0.50 → reduce position size</condition>
+        <condition>PSR < 0.3 → Sharpe not statistically robust</condition>
+        <condition>IC mean < 0.0 → weak classification signal</condition>
+      </stop_conditions>
+      <expected_artifacts>
+        <artifact path="data/v3/results/report.json" description="keys: {sharpe, max_dd, win_rate, profit_factor, calmar, psr, dsr, ic_mean, total_return, total_trades, long_trades, short_trades}" />
+        <artifact path="data/v3/results/equity_curve.npy" description="(T,) float64 — cumulative equity value per bar" />
+        <artifact path="data/v3/results/trades.parquet" description="All individual trades with entry/exit/direction/return" />
+      </expected_artifacts>
+    </instance>
+  </template>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- DELTA PACKET TEMPLATE (incremental changes)                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <template id="delta-packet" name="Incremental Change Specification">
+    <description>Triggered when code changes affect a subset of the pipeline. Defines what modules need re-execution and what artifacts need regeneration.</description>
+
+    <fields>
+      <field name="changed_since_commit" type="string" required="true" example="abc123f">Git commit hash of the last verified state</field>
+      <field name="affected_modules" type="list[string]" required="true" example="M-TOKENIZE, M-DATASET, M-FINE-TUNE, M-PREDICT, M-BACKTEST">All downstream modules that must re-execute (topological closure)</field>
+      <field name="manifest_changes" type="list[manifest_delta]" required="true">Which manifest keys changed and why</field>
+      <field name="revalidation_needed" type="list[string]" required="true">Which verification IDs must re-run</field>
+    </fields>
+
+    <manifest_delta_schema>
+      <field name="manifest_file" type="string" required="true" example="data/v3/processed/manifest.json">Which manifest changed</field>
+      <field name="changed_keys" type="list[string]" required="true" example="SBER.val.shape">Specific keys that differ from prior manifest</field>
+      <field name="reason" type="string" required="true" example="Added dividend adjustment to preprocessing">Why the manifest changed</field>
+      <field name="cascade_failure" type="string" example="None">Expected downstream effects if re-run not triggered</field>
+    </manifest_delta_schema>
+
+    <!-- Examples of concrete deltas -->
+    <example id="DELTA-1" name="Tokenizer retrained on MOEX">
+      <changed_since_commit>—</changed_since_commit>
+      <affected_modules>
+        <module>M-TOKENIZE</module>
+        <module>M-DATASET</module>
+        <module>M-FINE-TUNE</module>
+        <module>M-PREDICT</module>
+        <module>M-BACKTEST</module>
+      </affected_modules>
+      <manifest_changes>
+        <change manifest_file="data/v3/tokens/manifest.json" changed_keys="all {ticker}.{split}.codebook_util, entropy, recon_mse" reason="New tokenizer weights produce different token distributions" cascade_failure="All downstream modules would use stale tokens, predictions invalid" />
+      </manifest_changes>
+      <revalidation_needed>
+        <verify>V-M-TOKENIZE-01 through V-M-TOKENIZE-07</verify>
+        <verify>V-M-FINETUNE-01 through V-M-FINETUNE-06</verify>
+        <verify>V-M-BACKTEST-01 through V-M-BACKTEST-06</verify>
+      </revalidation_needed>
+    </example>
+
+    <example id="DELTA-2" name="global.yaml splits changed">
+      <changed_since_commit>—</changed_since_commit>
+      <affected_modules>
+        <module>M-PREPROCESS</module>
+        <module>M-TOKENIZE</module>
+        <module>M-DATASET</module>
+        <module>M-FINE-TUNE</module>
+        <module>M-PREDICT</module>
+        <module>M-BACKTEST</module>
+      </affected_modules>
+      <manifest_changes>
+        <change manifest_file="data/v3/processed/manifest.json" changed_keys="all {ticker}.train.shape, val.shape, test.shape" reason="Split date range change shifts bar counts between sets" cascade_failure="Train/val overlap, leakage, backtest uses wrong bars" />
+      </manifest_changes>
+      <revalidation_needed>
+        <verify>V-LEAK-01 (temporal split)</verify>
+        <verify>V-LEAK-04 (walk-forward non-overlap)</verify>
+      </revalidation_needed>
+    </example>
+
+    <example id="DELTA-3" name="Strategy logic changed (e.g. S01 BB filter)">
+      <changed_since_commit>—</changed_since_commit>
+      <affected_modules>
+        <module>M-BACKTEST</module>
+      </affected_modules>
+      <manifest_changes>
+        <change manifest_file="data/v3/results/report.json" changed_keys="sharpe, win_rate, total_trades" reason="Strategy entry/exit logic change affects trade outputs" cascade_failure="None — predictions unchanged, only trade log stale" />
+      </manifest_changes>
+      <revalidation_needed>
+        <verify>V-M-BACKTEST-01 through V-M-BACKTEST-06</verify>
+      </revalidation_needed>
+    </example>
+  </template>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- FAILURE HANDOFF TEMPLATE                                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <template id="failure-handoff" name="Module Failure Handoff">
+    <description>When a module fails, this packet captures the exact symptom for exact-match lookup in docs/operations/failures.md. The next agent uses this to diagnose without replaying the failure.</description>
+
+    <fields>
+      <field name="failed_module" type="string" required="true" example="M-FINE-TUNE">M-XXX module that failed</field>
+      <field name="symptom_exact" type="string" required="true" example="RuntimeError: CUDA out of memory. Tried to allocate 2.00 GiB.">Exact error message from log (copy-paste)</field>
+      <field name="from_failure_catalog" type="string" required="true" example="F-MODAL-02 (OOM)">Reference to exact entry in docs/operations/failures.md</field>
+      <field name="attempted_fixes" type="list[string]" required="true">What was already tried before handoff (prevents re-attempting)</field>
+      <field name="blocking_flag" type="boolean" required="true">Does this failure block all downstream modules?</field>
+      <field name="suggested_next" type="string" required="true">Concrete next action for the receiving agent</field>
+    </fields>
+
+    <!-- Known failure catalog references (from docs/operations/failures.md) -->
+    <failures_catalog>
+      <entry id="F-MODAL-01" module="M-FINE-TUNE" symptom="CUDNN_STATUS_NOT_INITIALIZED" fix="Rebuild Modal image with correct CUDA 12.x" />
+      <entry id="F-MODAL-02" module="M-FINE-TUNE" symptom="CUDA out of memory" fix="Reduce batch_size 12→8, grad_accum 2→3" blocking="true" />
+      <entry id="F-MODAL-03" module="M-FINE-TUNE" symptom="Modal timeout (8h)" fix="Resume from latest checkpoint, check heartbeat" blocking="false" note="FINE-TUNE can resume" />
+      <entry id="F-MODAL-04" module="M-FINE-TUNE" symptom="HF Hub: 401 Unauthorized" fix="Set HF_TOKEN environment variable" blocking="true" />
+      <entry id="F-MODAL-05" module="M-FINE-TUNE" symptom="Stale Modal image (no huggingface_hub)" fix="Rebuild image with pip install huggingface_hub" blocking="true" />
+      <entry id="F-MODAL-06" module="M-FINE-TUNE" symptom="Checkpoint collision (two runs same volume)" fix="Use unique checkpoint prefix, clean old checkpoints" blocking="true" />
+      <entry id="F-MODAL-07" module="M-FINE-TUNE" symptom="Ephemeral disk full" fix="Clean Modal volume, delete old checkpoints" blocking="true" />
+      <entry id="F-MODAL-08" module="M-PREDICT" symptom="T4 OOM (tokenizer + model)" fix="Use CPU fallback, sub_batch_size=2" blocking="false" note="CPU inference is slower but works" />
+      <entry id="F-DATA-01" module="M-FETCH" symptom="HTTP 429 rate-limit" fix="Build-in exponential backoff 2^n*2s, reduce workers 5→2" blocking="false" note="Fetch can resume with --resume" />
+      <entry id="F-DATA-02" module="M-FETCH" symptom="ConnectionError: HTTPSConnectionPool" fix="Check internet, wait 5 min, re-run with --resume" blocking="true" />
+      <entry id="F-DATA-03" module="M-FETCH" symptom="RuntimeError: Failed to fetch {ticker}" fix="5 retries exhausted, check MOEX ISS status" blocking="false" note="Can skip failed ticker for development" />
+      <entry id="F-DATA-04" module="M-FETCH" symptom="Empty holidays — bars < 50% of trading days" fix="Expected — skip if < min_bars threshold" blocking="false" />
+      <entry id="F-DATA-05" module="M-FETCH" symptom="Timeout (60s per request)" fix="MOEX ISS slow, increase timeout or split date range" blocking="false" />
+      <entry id="F-TOKEN-01" module="M-TOKENIZE" symptom="Low codebook utilization (< 50)" fix="Contingency: retrain tokenizer on MOEX §2.2" blocking="true" />
+      <entry id="F-TOKEN-02" module="M-TOKENIZE" symptom="Tokenizer download (HF auth)" fix="HF_TOKEN for gated model NeoQuasar/Kronos-Tokenizer-2k" blocking="true" />
+      <entry id="F-BACKTEST-01" module="M-BACKTEST" symptom="All predictions correlated → no spread" fix="Check M-TOKENIZE per-asset codes, sector-neutralize" blocking="true" />
+      <entry id="F-BACKTEST-02" module="M-BACKTEST" symptom="Sharpe < 0.5 (quality gate fail)" fix="Go to Phase 3 iteration loop" blocking="false" note="Model works but too weak" />
+    </failures_catalog>
+  </template>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- ASSUMPTION LIST TEMPLATE                                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <template id="assumption-list" name="Architecture & Data Assumptions">
+    <description>Every assumption that the project depends on. If violated, the model may silently produce garbage — must be validated and have a contingency if broken.</description>
+
+    <assumptions>
+      <assumption id="A1" category="model" severity="critical">
+        <statement>KronosTokenizer-2k (trained on ALI09988 5-min bars) generalizes to MOEX 10-min bars without retraining</statement>
+        <validation_method>Phase 0 quality gates: codebook_util >= 200, entropy >= 5.0, recon_mse <= 0.01</validation_method>
+        <if_violated_action>Contingency §2.2: Retrain tokenizer on MOEX (8+8 bit) or fall back to raw OHLCV with linear projection</if_violated_action>
+      </assumption>
+
+      <assumption id="A2" category="data" severity="critical">
+        <statement>Per-window z-score normalization (mu,sigma per 506-bar window) removes price-level differences sufficiently for multi-asset training without explicit asset-ID embedding</statement>
+        <validation_method>Per-asset codebook utilization (V-M-TOKENIZE-04): all 21 assets >= 50 unique codes. Cross-correlation RMS < 0.5 (V-M-TOKENIZE-05)</validation_method>
+        <if_violated_action>Sector-neutral z-scoring. If still fails (< 0.3 Sharpe): add asset-ID embedding (architecture change, risk to pre-trained weights)</if_violated_action>
+      </assumption>
+
+      <assumption id="A3" category="data" severity="high">
+        <statement>10-min bars have higher SNR than 5-min bars (less microstructure noise, stronger trends)</statement>
+        <validation_method>Compare prediction metrics (Sharpe, WR) against hypothetical 5-min baseline if Phase 2 Sharpe fails</validation_method>
+        <if_violated_action>Test with 5-min data via MOEX marketdata engine (supports interval=5)</if_violated_action>
+      </assumption>
+
+      <assumption id="A4" category="model" severity="high">
+        <statement>CE loss on discrete tokens avoids mean collapse (unlike MSE on log returns) and produces distributional predictions that rank well cross-sectionally</statement>
+        <validation_method>Phase 1 val CE < 0.9 * random_CE (V-M-FINETUNE-03). Phase 2 IC mean >= 0.02 (V-M-BACKTEST-05)</validation_method>
+        <if_violated_action>If CE converges but IC is zero: tokens encode patterns but not directional signal → add ranking loss (ListMLE). If CE > random_CE: model architecture wrong</if_violated_action>
+      </assumption>
+
+      <assumption id="A5" category="data" severity="high">
+        <statement>MOEX ISS API is reliable and returns complete data for all 21 tickers within the 2023-2026 window</statement>
+        <validation_method>Data quality assertions (V-DATA-01 through V-DATA-05): no NaN, >= 500 bars, monotonic timestamps, volume > 0</validation_method>
+        <if_violated_action>Remove ticker from universe if < min_bars. Use fallback data source. Retry with exponential backoff</if_violated_action>
+      </assumption>
+
+      <assumption id="A6" category="data" severity="medium">
+        <statement>Dividend adjustment is low priority — affects ~1-2 bars/year/ticker, skip for Phase 0-1</statement>
+        <validation_method>Check preprocessed data: sudden −2% to −10% drops on ex-div dates</validation_method>
+        <if_violated_action>Implement dividend adjustment via MOEX ISS /securities/{ticker}/dividends.json (Phase 2+)</if_violated_action>
+      </assumption>
+
+      <assumption id="A7" category="model" severity="high">
+        <statement>Tokenizer frozen during fine-tune preserves pre-trained VQ-VAE representation. Predictor adapts to MOEX token distribution</statement>
+        <validation_method>Verify all tokenizer params have requires_grad=False (V-M-TOKENIZE-07). Val CE decreases (V-M-FINETUNE-01)</validation_method>
+        <if_violated_action>If val CE does not decrease: unfreeze tokenizer partially (last 2 encoder layers) or retrain tokenizer on MOEX</if_violated_action>
+      </assumption>
+
+      <assumption id="A8" category="infra" severity="high">
+        <statement>A100 40GB is available on Modal and fits batch=12, L=512 with bf16 (~10-12GB VRAM)</statement>
+        <validation_method>Modal provision check before fine-tune: verify GPU type, VRAM available</validation_method>
+        <if_violated_action>Reduce batch_size to 8, increase grad_accum to 3. If no A100: use T4 with batch=2 (6× slower, 6h total)</if_violated_action>
+      </assumption>
+
+      <assumption id="A9" category="model" severity="medium">
+        <statement>Walk-forward split (train 2023→2025, val 2025-02→2025-09, test 2025-09→2026-05) prevents overfitting and gives honest OOS metrics</statement>
+        <validation_method>Walk-forward consistency check (V-M-BACKTEST-06): |val_sharpe - test_sharpe| / |test_sharpe| < 0.20</validation_method>
+        <if_violated_action>If val >> test: overfit to val period → add dropout 0.2, reduce epochs. If both negative: fundamental problem → Phase 3 iteration</if_violated_action>
+      </assumption>
+
+      <assumption id="A10" category="strategy" severity="medium">
+        <statement>Cross-sectional ranking (top-3 long, bot-2 short) with session enforcement produces positive expected return</statement>
+        <validation_method>IC mean >= 0.02, Sharpe >= 0.5. Session violation count == 0</validation_method>
+        <if_violated_action>Try top-2/bot-2, top-5/bot-3, or pure long-only. Adjust session entry window</if_violated_action>
+      </assumption>
+    </assumptions>
+  </template>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- CHECKPOINT FORMAT                                                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <template id="checkpoint-format" name="Phase Completion Checkpoints">
+    <description>After each phase, record what was produced, what passed verification, and what the next step is. This enables agent handoff without context loss.</description>
+
+    <checkpoint id="CP-PHASE-0" name="Tokenizer Quality Gate Complete">
+      <after_phase>0</after_phase>
+      <produced>
+        <artifact path="data/v3/tokens/{ticker}_train.npy" count="21" />
+        <artifact path="data/v3/tokens/{ticker}_val.npy" count="21" />
+        <artifact path="data/v3/tokens/manifest.json" />
+      </produced>
+      <passed_verification>
+        <verify>V-M-TOKENIZE-01 (codebook_util >= 200)</verify>
+        <verify>V-M-TOKENIZE-02 (entropy >= 5.0)</verify>
+        <verify>V-M-TOKENIZE-03 (recon_mse <= 0.01)</verify>
+        <verify>V-M-TOKENIZE-04 (per_asset_codes >= 50)</verify>
+        <verify>V-M-TOKENIZE-05 (RMS correlation < 0.5)</verify>
+        <verify>V-M-TOKENIZE-06 (no NaN)</verify>
+        <verify>V-M-TOKENIZE-07 (frozen params)</verify>
+      </passed_verification>
+      <next>Run M-PREPROCESS → M-TOKENIZE. If all gates pass: proceed to M-DATASET → M-FINE-TUNE (Phase 1). If any gate fails: go to contingency §2.2.</next>
+    </checkpoint>
+
+    <checkpoint id="CP-PHASE-1" name="Fine-tune Complete">
+      <after_phase>1</after_phase>
+      <produced>
+        <artifact path="checkpoints/kronos_moex/kronos_moex_best.pt" />
+        <artifact path="checkpoints/kronos_moex/kronos_moex_epoch_30.pt" />
+        <artifact path="checkpoints/kronos_moex/history.json" />
+      </produced>
+      <passed_verification>
+        <verify>V-M-FINETUNE-01 (CE convergence)</verify>
+        <verify>V-M-FINETUNE-02 (no overfit: gap < 0.5)</verify>
+        <verify>V-M-FINETUNE-03 (val CE < 0.9 * random_CE)</verify>
+        <verify>V-M-FINETUNE-04 (no NaN in checkpoint)</verify>
+        <verify>V-M-FINETUNE-05 (grad_norm in range)</verify>
+        <verify>V-M-FINETUNE-06 (resume integrity)</verify>
+      </passed_verification>
+      <next>Load best checkpoint into M-PREDICT. Run inference on test split. If val CE diverges or does not improve: check tokenizer quality. Proceed to Phase 2.</next>
+    </checkpoint>
+
+    <checkpoint id="CP-PHASE-2" name="Backtest Complete">
+      <after_phase>2</after_phase>
+      <produced>
+        <artifact path="data/v3/predictions/{ticker}_test.npy" count="21" />
+        <artifact path="data/v3/results/report.json" />
+        <artifact path="data/v3/results/equity_curve.npy" />
+        <artifact path="data/v3/results/trades.parquet" />
+      </produced>
+      <passed_verification>
+        <verify>V-M-BACKTEST-01 (Sharpe >= 0.5)</verify>
+        <verify>V-M-BACKTEST-02 (WR >= 52%)</verify>
+        <verify>V-M-BACKTEST-03 (MaxDD <= 25%)</verify>
+        <verify>V-M-BACKTEST-04 (PSR >= 0.7)</verify>
+        <verify>V-M-BACKTEST-05 (IC mean >= 0.02)</verify>
+        <verify>V-M-BACKTEST-06 (val ~= test, no overfit)</verify>
+        <verify>V-M-BACKTEST-07 (session enforcement)</verify>
+        <verify>V-LEAK-01 through V-LEAK-08 (leakage audit)</verify>
+      </passed_verification>
+      <next>If all gates pass: model accepted for alpha generation. Deploy inference pipeline. If any gate fails: go to Phase 3 iteration loop (§2.6 Phase 3). Calibrate hyperparameters (4-pass sweep).</next>
+    </checkpoint>
+  </template>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- MANIFEST VALIDATION CHAIN                                           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <template id="manifest-chain" name="Inter-Step Manifest Validation">
+    <description>Each module validates the previous module's manifest before executing. If validation fails, exit with code 1. Do NOT skip validation.</description>
+
+    <validation_steps>
+      <step order="1" module="M-PREPROCESS" validates="M-FETCH manifest.json">
+        <condition key="all 21 tickers present" />
+        <condition key="rows > 0 per ticker" />
+        <fail_action>Exit code 1. Print: "Missing ticker: {ticker}" or "Empty data: {ticker}".</fail_action>
+      </step>
+
+      <step order="2" module="M-TOKENIZE" validates="M-PREPROCESS manifest.json">
+        <condition key="shapes (T, 6) per split" />
+        <condition key="all 3 splits (train, val, test) present per ticker" />
+        <fail_action>Exit code 1. Print: "Shape mismatch: {ticker}/{split} expected (T,6) got {shape}".</fail_action>
+      </step>
+
+      <step order="3" module="M-DATASET" validates="M-TOKENIZE manifest.json">
+        <condition key="tokens present per split per ticker" />
+        <condition key="quality gates passed (codebook_util, entropy, recon_mse in manifest)" />
+        <condition key="no gate key has failed marker" />
+        <fail_action>Exit code 1. Print: "Quality gate not passed. Run M-TOKENIZE --quality-check first."</fail_action>
+      </step>
+
+      <step order="4" module="M-PREDICT" validates="M-FINE-TUNE history.json">
+        <condition key="checkpoint file exists (kronos_moex_best.pt)" />
+        <condition key="val_ce < random_CE (from history.json)" />
+        <fail_action>Exit code 1. Print: "Model not trained or checkpoint missing. Run M-FINE-TUNE."</fail_action>
+      </step>
+
+      <step order="5" module="M-BACKTEST" validates="M-PREDICT manifest.json">
+        <condition key="predictions exist for all 21 tickers per split" />
+        <condition key="shapes match (T_test, 6, 6)" />
+        <fail_action>Exit code 1. Print: "Missing predictions for {ticker}/{split} or shape mismatch."</fail_action>
+      </step>
+    </validation_steps>
+  </template>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- VRAM BUDGETS                                                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <template id="vram-budgets" name="GPU Memory Allocation Plans">
+    <budget phase="0" gpu="T4/CPU" total="< 2 GB">
+      <item component="Tokenizer weights (bf16)" size="~50 MB" />
+      <item component="Encoder forward pass activations" size="~1 GB" />
+      <item component="Decoder forward pass activations" size="~0.8 GB" />
+      <item component="Temporary token tensors" size="< 0.2 GB" />
+    </budget>
+
+    <budget phase="1" gpu="A100-40GB" total="~10-12 GB">
+      <item component="Model weights (bf16, 24.7M params)" size="~50 MB" />
+      <item component="Optimizer states (AdamW, fp32)" size="~300 MB" />
+      <item component="Attention score matrices (peak, 12 layers × batch=12 × heads=16 × L²=512² × 2B)" size="~980 MB per layer" />
+      <item component="KV cache during teacher forcing" size="~19 MB" />
+      <item component="FFN activations (SwiGLU)" size="~1.5 GB" />
+      <item component="Gradients + autograd graph" size="~8 GB" />
+    </budget>
+
+    <budget phase="2" gpu="T4-16GB" total="< 0.5 GB">
+      <item component="Model weights (bf16)" size="~25 MB" />
+      <item component="Context buffer (1 × 512 × 256 × 2)" size="~0.26 MB" />
+      <item component="Autoregressive step activations" size="< 0.3 GB" />
+    </budget>
+
+    <budget phase="2" gpu="CPU" total="< 8 GB RAM">
+      <item component="Full price data (21 assets × ~8.7k bars × 6 cols)" size="~5 MB" />
+      <item component="Backtest trade log (in memory)" size="< 500 MB" />
+      <item component="Equity curve + metrics" size="< 100 MB" />
+    </budget>
+  </template>
+
+</grace:operational-packets>

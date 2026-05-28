@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grace:verification-plan xmlns:grace="https://grace.ai/schema/verification-plan">
+  <project>Kronos for Alpha</project>
+  <revision>1.0</revision>
+  <date>2026-05-28</date>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 0: TOKENIZER QUALITY GATE VERIFICATION                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-PHASE-0" name="Tokenizer Quality Gates">
+    <source>config/global.yaml §tokenizer.quality_gates</source>
+
+    <verification id="V-M-TOKENIZE-01" description="Codebook utilization: count unique s1+s2 token IDs across all bars" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="codebook_util >= 200 (out of 1024 vocabulary, >= 20%)" stop_on_fail="true" module="M-TOKENIZE" />
+
+    <verification id="V-M-TOKENIZE-02" description="Token entropy: information-theoretic diversity of token distribution" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="entropy >= 5.0 bits (out of 10 max)" stop_on_fail="true" module="M-TOKENIZE" />
+
+    <verification id="V-M-TOKENIZE-03" description="Reconstruction MSE: fidelity of OHLCV round-trip through VQ-VAE" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="recon_mse <= 0.01 (normalized OHLCV space)" stop_on_fail="false" module="M-TOKENIZE" note="If > 0.05: reduce codebook bits, may indicate domain shift. If 0.01-0.05: proceed with caution, monitor Phase 2 metrics." />
+
+    <verification id="V-M-TOKENIZE-04" description="Per-asset minimum unique codes: ensure no ticker collapses to < 50 codes" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="all 21 assets >= 50 unique codes each" stop_on_fail="true" module="M-TOKENIZE" note="If any asset < 20: remove from universe. If 20-50: flag, may be low-volatility asset." />
+
+    <verification id="V-M-TOKENIZE-05" description="Cross-sectional RMS correlation: assets must be differentiable" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="RMS correlation < 0.5 across 21-asset return matrix" stop_on_fail="false" module="M-TOKENIZE" note="If > 0.7: apply sector-neutral z-scoring. All assets moving together → no cross-sectional spread." />
+
+    <verification id="V-M-TOKENIZE-06" description="No NaN in token output — all (B,T) arrays are valid int64" command="python -c 'import numpy as np; d=np.load(\"data/v3/tokens/SBER_train.npy\"); assert not np.isnan(d).any()'" expected="No NaN, all values in [0, 1023]" stop_on_fail="true" module="M-TOKENIZE" />
+
+    <verification id="V-M-TOKENIZE-07" description="Tokenizer frozen mode: requires_grad = False for all tokenizer params" command="python -c 'from src.core.kronos.tokenizer import KronosTokenizer; t=KronosTokenizer.from_pretrained(\"NeoQuasar/Kronos-Tokenizer-2k\"); assert all(not p.requires_grad for p in t.parameters())'" expected="All tokenizer params have requires_grad=False" stop_on_fail="false" module="M-TOKENIZE" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 1: FINE-TUNE VERIFICATION                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-PHASE-1" name="Fine-tune Verification">
+    <source>config/global.yaml §training</source>
+
+    <verification id="V-M-FINETUNE-01" description="CE loss convergence: validation CE monotonically decreases over 30 epochs" command="python src/core/kronos/fine_tune.py --resume kronos_moex_best.pt; grep val_ce checkpoints/kronos_moex/history.json" expected="Val CE at epoch 30 < Val CE at epoch 5 (decreasing trend)" stop_on_fail="true" module="M-FINE-TUNE" />
+
+    <verification id="V-M-FINETUNE-02" description="Train CE vs Val CE gap: check for overfitting" command="python -c \"import json; d=json.load(open('checkpoints/kronos_moex/history.json')); gap=abs(d['train_ce'][-1]-d['val_ce'][-1]); print(gap)\"" expected="Train CE - Val CE gap < 0.5 (not overfitting). If gap > 0.5: add dropout 0.2" stop_on_fail="true" module="M-FINE-TUNE" />
+
+    <verification id="V-M-FINETUNE-03" description="Val CE vs random baseline: model must beat random token prediction" command="python -c \"import json; d=json.load(open('checkpoints/kronos_moex/history.json')); ce=d['val_ce'][-1]; random_ce=10.0; assert ce < 0.9 * random_ce, f'CE {ce} >= {0.9*random_ce}'\"" expected="Val CE < 0.9 * random_CE (random_CE ~= 10.0 for 1024-class)" stop_on_fail="true" module="M-FINE-TUNE" note="If val CE >= random CE: model not learning — check tokenizer, data quality." />
+
+    <verification id="V-M-FINETUNE-04" description="No NaN in loss: verify all gradients are finite" command="python -c \"import torch; ckpt=torch.load('checkpoints/kronos_moex_best.pt', map_location='cpu'); assert not any(torch.isnan(p).any() for p in ckpt.values())\"" expected="All parameters finite, no NaN in checkpoint" stop_on_fail="true" module="M-FINE-TUNE" />
+
+    <verification id="V-M-FINETUNE-05" description="Gradient norm in reasonable range" command="tail -100 logs/fine_tune.log | grep 'grad_norm'" expected="grad_norm > 0.01 and < 50.0 (not vanishing, not exploding)" stop_on_fail="false" module="M-FINE-TUNE" />
+
+    <verification id="V-M-FINETUNE-06" description="Checkpoint resume integrity: resume produces same loss trajectory" command="diff <(python fine_tune.py --epochs 5) <(python fine_tune.py --epochs 3; python fine_tune.py --resume --epochs 2) | grep val_ce" expected="Resumed run matches fresh run val_CE within 1e-6 tolerance" stop_on_fail="false" module="M-FINE-TUNE" />
+
+    <verification id="V-M-FINETUNE-07" description="Per-asset CE tracking: no single asset dominates loss improvement" command="grep 'per_asset_ce' checkpoints/kronos_moex/history.json" expected="Std dev of per-asset val CE < 2.0 (all assets learning)" stop_on_fail="false" module="M-FINE-TUNE" note="If one asset dominates: possible data quality issue with that ticker." />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 2: BACKTEST VERIFICATION                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-PHASE-2" name="Backtest Verification">
+    <source>config/global.yaml §backtest.quality_gates</source>
+
+    <verification id="V-M-BACKTEST-01" description="Sharpe ratio: annualized risk-adjusted return on test set" command="python -m src.evaluation.backtest --predictions data/v3/predictions --split test; cat data/v3/results/report.json | jq .sharpe" expected="sharpe >= 0.5 on test split" stop_on_fail="true" module="M-BACKTEST" note="If < 0.0: go to Phase 3 iteration. If 0.0-0.5: weak but positive." />
+
+    <verification id="V-M-BACKTEST-02" description="Win rate: percentage of profitable trades" command="cat data/v3/results/report.json | jq .win_rate" expected="win_rate >= 0.52 (>= 52% of trades profitable)" stop_on_fail="false" module="M-BACKTEST" />
+
+    <verification id="V-M-BACKTEST-03" description="Max Drawdown: maximum peak-to-trough decline" command="cat data/v3/results/report.json | jq .max_dd" expected="max_dd <= 0.25 (<= 25% drawdown)" stop_on_fail="true" module="M-BACKTEST" />
+
+    <verification id="V-M-BACKTEST-04" description="PSR (Probabilistic Sharpe Ratio): statistical significance of Sharpe" command="cat data/v3/results/report.json | jq .psr" expected="psr >= 0.7 (high probability Sharpe > 0 is real)" stop_on_fail="false" module="M-BACKTEST" note="If < 0.3: Sharpe not robust — increase MC sample_count." />
+
+    <verification id="V-M-BACKTEST-05" description="Cross-sectional IC mean: information coefficient across assets per timestamp" command="cat data/v3/results/report.json | jq .ic_mean" expected="ic_mean >= 0.02 (positive cross-sectional ranking signal)" stop_on_fail="true" module="M-BACKTEST" />
+
+    <verification id="V-M-BACKTEST-06" description="Walk-forward consistency: val split metrics within 20% of test split" command="python -m src.evaluation.backtest --split val; python -m src.evaluation.backtest --split test; python -c 'compare_val_test()'" expected="|val_sharpe - test_sharpe| / |test_sharpe| < 0.20 (no overfit)" stop_on_fail="false" module="M-BACKTEST" />
+
+    <verification id="V-M-BACKTEST-07" description="Session enforcement: all entries between 10:00-18:10, all exits by 18:35" command="python -c \"import json; t=json.load(open('data/v3/results/report.json')); assert t['session_violations'] == 0\"" expected="Zero session violations" stop_on_fail="true" module="M-BACKTEST" />
+
+    <verification id="V-M-BACKTEST-08" description="No duplicate trades: each (timestamp, ticker) pair has >= 1 entry" command="python -c \"import pandas as pd; df=pd.read_parquet('data/v3/results/trades.parquet'); assert df.duplicated(['pred_ts','ticker']).sum() == 0\"" expected="Zero duplicate trades" stop_on_fail="true" module="M-BACKTEST" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- LEAKAGE AUDIT VERIFICATION (8 tests)                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-LEAKAGE" name="Leakage Audit (8 tests)">
+    <source>docs/reports/audit.md</source>
+
+    <verification id="V-LEAK-01" description="Temporal split: train indices < val indices < test indices" command="python -c \"assert train_end_date < val_start_date; assert val_end_date < test_start_date\"" expected="2023-01-01..2025-02-01 < 2025-02-01..2025-09-01 < 2025-09-01..2026-05-01" stop_on_fail="true" module="M-PREPROCESS" reference="audit.md test #5" />
+
+    <verification id="V-LEAK-02" description="Feature leakage: no future data in lookback window" command="python -c \"x_df=candles[t:t+506]; y_df=candles[t+506:t+512]; assert x_df.index.max() < y_df.index.min()\"" expected="All lookback bars strictly before first prediction bar" stop_on_fail="true" module="M-PREDICT" reference="audit.md test #6" />
+
+    <verification id="V-LEAK-03" description="Per-window z-score: mu,sigma computed per individual window (no global stats)" command="python -c \"for w in windows: mu=np.mean(w); sigma=np.std(w); assert mu and sigma computed per-window\"" expected="No global z-score normalization — each window independently normalized" stop_on_fail="true" module="M-PREPROCESS" reference="architecture.md §2.3" />
+
+    <verification id="V-LEAK-04" description="Walk-forward: step == pred_len, non-overlapping windows" command="python -c \"assert step == pred_len == 6; for i in range(1, len(windows)): assert windows[i].start == windows[i-1].end\"" expected="Windows are contiguous/non-overlapping with no gap or overlap" stop_on_fail="true" module="M-BACKTEST" reference="audit.md test #3" />
+
+    <verification id="V-LEAK-05" description="Session filter: only main session 10:00-18:40 MSK bars present" command="python -c \"assert all(d.hour*60+d.minute >= 600 for d in df.index); assert all(d.hour*60+d.minute <= 1120 for d in df.index)\"" expected="No bars outside 10:00-18:40 MSK (no overnight, pre-market, post-market)" stop_on_fail="true" module="M-PREPROCESS" reference="architecture.md §2.3" />
+
+    <verification id="V-LEAK-06" description="Consensus leakage: consensus computed from sample predictions only, never actuals" command="python -c \"assert 'actual' not in consensus_fn.__code__.co_varnames; assert all(k in ['close_samples','prev_close','threshold'] for k in consensus_fn.__code__.co_varnames)\"" expected="consensus() function signature has no 'actual' parameter" stop_on_fail="true" module="M-SIGNAL-ATOMS" reference="audit.md test #7" />
+
+    <verification id="V-LEAK-07" description="TP/SL no lookahead: exit decision uses only current bar high/low, not future" command="python -c \"assert 'actuals[i,0]' in trade for i in range(pred_len); assert 'actuals[j,1]' not in trade for j > i\"" expected="Trade exit loop checks actuals[i].high/low, never actuals[i+1]" stop_on_fail="true" module="M-STRATEGY-CORE" reference="audit.md test #8" />
+
+    <verification id="V-LEAK-08" description="Cross-sectional z-score: ranking uses same-timestamp predictions only" command="python -c \"for t in timestamps: preds=get_preds_at(t); assert all(p.timestamp == t for p in preds); zscores=(preds-mean(preds))/std(preds)\"" expected="All z-scores computed cross-sectionally at identical timestamps" stop_on_fail="true" module="M-BACKTEST" reference="architecture.md §2.5" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- GRACE INTEGRITY                                                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-GRACE" name="GRACE Integrity Checks">
+
+    <verification id="V-GRACE-01" description="GRACE lint: autonomous profile passes without errors" command="grace lint --profile autonomous docs/grace/" expected="Exit code 0, no ERROR-level diagnostics" stop_on_fail="true" module="M-DOCS" />
+
+    <verification id="V-GRACE-02" description="All 6 GRACE artifacts present and well-formed XML" command="find docs/grace/ -name '*.xml' | wc -l ; for f in docs/grace/*.xml; do xmllint --noout \"$f\" 2>&amp;1; done" expected="6 files found, xmllint passes for all" stop_on_fail="true" module="M-DOCS" />
+
+    <verification id="V-GRACE-03" description="AGENTS.md grep mappings resolve to existing files" command="for mapping in docs/grace/ docs/module-contracts.md config/global.yaml; do test -e \"$mapping\" &amp;&amp; echo 'OK: '$mapping; done" expected="All 6 grep targets in AGENTS.md resolve to existing files" stop_on_fail="true" module="M-DOCS" />
+
+    <verification id="V-GRACE-04" description="No stale M-XXX module references (all IDs in development-plan match AGENTS.md)" command="diff <(grep -oP 'M-[A-Z0-9-]+' AGENTS.md | sort -u) <(grep -oP 'M-[A-Z0-9-]+' docs/grace/development-plan.xml | sort -u)" expected="No orphan M-XXX IDs that exist in one file but not the other" stop_on_fail="false" module="M-DOCS" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- CLI CONTRACT TESTS                                                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-CLI" name="CLI Contract Tests">
+    <source>docs/conventions/cli.md</source>
+
+    <verification id="V-CLI-01" description="M-FETCH --help" command="python -m src.data.fetcher --help" expected="Prints usage, all flags, exit codes 0" stop_on_fail="true" module="M-FETCH" />
+
+    <verification id="V-CLI-02" description="M-FETCH --dry-run" command="python -m src.data.fetcher --dry-run --start 2023-01-01 --end 2023-02-01" expected="Prints plan: N tickers × M months, no data fetched" stop_on_fail="true" module="M-FETCH" />
+
+    <verification id="V-CLI-03" description="M-FETCH --status (without prior fetch)" command="python -m src.data.fetcher --status" expected="Prints manifest status or 'no manifest found', exit code 0" stop_on_fail="true" module="M-FETCH" />
+
+    <verification id="V-CLI-04" description="M-PREDICT --help" command="python -m src.core.kronos.predictor --help" expected="Prints usage with --checkpoint, --split, --sample-count, exit code 0" stop_on_fail="true" module="M-PREDICT" />
+
+    <verification id="V-CLI-05" description="M-TOKENIZE --help" command="python -m src.core.kronos.tokenizer --help" expected="Prints usage with --input, --output, --quality-check, exit code 0" stop_on_fail="true" module="M-TOKENIZE" />
+
+    <verification id="V-CLI-06" description="Manifest validation chain: each module validates predecessor manifest" command="python -c \"from src.data.fetcher import ManifestValidator; assert hasattr(ManifestValidator, 'validate')\"" expected="Each module has manifest validation before execution, exits with code 1 on failure" stop_on_fail="true" module="M-FETCH" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- IMPORT INTEGRITY                                                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-IMPORT" name="Import Integrity">
+    <description>Verify all src.* imports resolve without circular dependencies.</description>
+
+    <verification id="V-IMPORT-01" description="All src/core/* imports resolve" command="python -c \"from src.core.kronos.modules import HierarchicalEmbedding, TransformerBlock, RMSNorm, DualHead, DifferentiableEntropyFunction, BSQuantizer\"" expected="No ImportError" stop_on_fail="true" module="M-KRONOS-MODULES" />
+
+    <verification id="V-IMPORT-02" description="All src/data/* imports resolve" command="python -c \"from src.data.fetcher import fetch_and_save; from src.data.base import DataSource; from src.data.cache import DataCache\"" expected="No ImportError" stop_on_fail="true" module="M-FETCH" />
+
+    <verification id="V-IMPORT-03" description="All src/signals/* imports resolve" command="python -c \"from src.signals.atoms import consensus, boundaries, dispersion; from src.signals.ict import detect_order_block, detect_fvg; from src.signals.volatility import compute_atr; from src.signals.vwap import compute_vwap; from src.signals.fractal import find_fractals; from src.signals.divergence import rsi; from src.signals.bars import classify_bar\"" expected="No ImportError (7 signal families)" stop_on_fail="true" module="M-SIGNAL-ATOMS" />
+
+    <verification id="V-IMPORT-04" description="All src/strategies/* imports resolve" command="python -c \"from src.strategies.core import load_config, _simulate_trade, report; from src.strategies.vanilla import run; from src.strategies.s01_bb import run; from src.strategies.s02_bb_mr import run; from src.strategies.s05_bb_breakout import run; from src.strategies.s20_ob import run; from src.strategies.s28_vol_ob import run; from src.strategies.s34_vwap_ob import run; from src.strategies.s38_lowvol_ob import run\"" expected="No ImportError (8 strategies + core)" stop_on_fail="true" module="M-STRATEGY-CORE" />
+
+    <verification id="V-IMPORT-05" description="All src/evaluation/* imports resolve" command="python -c \"from src.evaluation.metrics import sharpe_ratio, max_drawdown, win_rate, psr, ic_rank, StrategyMetrics; from src.evaluation.evaluate import evaluate; from src.evaluation.output import save_samples, reconstruct; from src.evaluation.walk_forward import run_walk_forward; from src.evaluation.calibrate import run_calibration\"" expected="No ImportError (5 evaluation modules)" stop_on_fail="true" module="M-METRICS" />
+
+    <verification id="V-IMPORT-06" description="No circular imports" command="python -c \"import importlib; import sys; modules=sorted([m for m in sys.modules if m.startswith('src.')]); print('\\n'.join(modules))\" 2>&amp;1 | head -50" expected="Linear dependency: data → kronos → signals → strategies → evaluation. No cycles." stop_on_fail="true" module="all" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- DATA QUALITY ASSERTIONS                                             -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-DATA" name="Data Quality Assertions">
+    <source>docs/architecture.md §2.3</source>
+
+    <verification id="V-DATA-01" description="No NaN in any OHLCV column" command="python -c \"import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert not df[['open','high','low','close','volume']].isna().any().any(), f'{f} has NaN'\"" expected="Zero NaN values in any ticker file" stop_on_fail="true" module="M-FETCH" />
+
+    <verification id="V-DATA-02" description="Minimum 500 bars per asset (not dead/delisted)" command="python -c \"import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert len(df) >= 500, f'{f} has only {len(df)} bars'\"" expected="All 21 assets have >= 500 bars" stop_on_fail="true" module="M-FETCH" />
+
+    <verification id="V-DATA-03" description="Timestamps monotonically increasing" command="python -c \"import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert df['timestamp'].is_monotonic_increasing, f'{f} timestamps not sorted'\"" expected="All timestamps sorted ascending per file" stop_on_fail="true" module="M-FETCH" />
+
+    <verification id="V-DATA-04" description="Volume > 0 for all bars (zero-volume = holiday or API error)" command="python -c \"import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); zero_vol=len(df[df['volume']<0]); assert zero_vol==0, f'{f} has {zero_vol} negative volume bars'\"" expected="No negative volume bars. Zero volume ok (holidays)." stop_on_fail="true" module="M-FETCH" />
+
+    <verification id="V-DATA-05" description="Amount column computed: close * volume * lot_size (per ticker)" command="python -c \"from config import load_global_yaml; cfg=load_global_yaml(); lots=cfg['lot_sizes']; for ticker,lot in lots.items(): df=pd.read_parquet(f'data/v3/raw/{ticker}.parquet'); expected=df['close']*df['volume']*lot; assert (abs(df['amount']-expected).mean() < 1.0) if 'amount' in df.columns else True\"" expected="Amount column = close * volume * lot_size within tolerance" stop_on_fail="false" module="M-FETCH" />
+  </verification_suite>
+
+</grace:verification-plan>

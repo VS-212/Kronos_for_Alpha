@@ -1,0 +1,49 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.analysis.typeCheckingMode": "strict",
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "**/data",
+    "**/checkpoints",
+    "**/templates"
+  ],
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/src"
+  ],
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit"
+    },
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "ruff.lint.args": [
+    "--config=${workspaceFolder}/pyproject.toml"
+  ],
+  "ruff.format.args": [
+    "--config=${workspaceFolder}/pyproject.toml"
+  ],
+  "mypy-type-checker.args": [
+    "--config-file=${workspaceFolder}/pyproject.toml"
+  ],
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.venv": true,
+    "**/*.pyc": true,
+    "data/": true,
+    "checkpoints/": true
+  },
+  "files.watcherExclude": {
+    "**/data/**": true,
+    "**/checkpoints/**": true,
+    "**/.venv/**": true
+  },
+  "notebook.formatOnSave.enabled": true,
+  "notebook.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  }
+}

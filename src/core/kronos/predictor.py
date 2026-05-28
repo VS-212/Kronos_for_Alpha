@@ -1,0 +1,873 @@
+"""
+M-PREDICT: Kronos inference and prediction wrappers
+Contract: tokenizer + model → autoregressive sampling → OHLCV predictions [B,pred_len,6]
+"""
+
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn.functional as F
+from tqdm import trange
+
+
+def top_k_top_p_filtering(
+    logits,
+    top_k: int = 0,
+    top_p: float = 1.0,
+    filter_value: float = -float("Inf"),
+    min_tokens_to_keep: int = 1,
+):
+    """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+    Args:
+        logits: logits distribution shape (batch size, vocabulary size)
+        if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
+        if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+            Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+        Make sure we keep at least min_tokens_to_keep per batch example in the output
+    From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
+    """
+    if top_k > 0:
+        top_k = min(max(top_k, min_tokens_to_keep), logits.size(-1))  # Safety check
+        # Remove all tokens with a probability less than the last token of the top-k
+        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        logits[indices_to_remove] = filter_value
+        return logits
+
+    if top_p < 1.0:
+        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+
+        # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
+        sorted_indices_to_remove = cumulative_probs > top_p
+        if min_tokens_to_keep > 1:
+            # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
+            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
+        # Shift the indices to the right to keep also the first token above the threshold
+        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 0] = 0
+
+        # scatter sorted tensors to original indexing
+        indices_to_remove = sorted_indices_to_remove.scatter(
+            1, sorted_indices, sorted_indices_to_remove
+        )
+        logits[indices_to_remove] = filter_value
+        return logits
+
+
+def sample_from_logits(logits, temperature=1.0, top_k=None, top_p=None, sample_logits=True):
+    logits = logits / temperature
+    if top_k is not None or top_p is not None:
+        if top_k > 0 or top_p < 1.0:
+            logits = top_k_top_p_filtering(logits, top_k=top_k, top_p=top_p)
+
+    probs = F.softmax(logits, dim=-1)
+
+    if not sample_logits:
+        _, x = torch.topk(probs, k=1, dim=-1)
+    else:
+        x = torch.multinomial(probs, num_samples=1)
+
+    return x
+
+
+def auto_regressive_inference(
+    tokenizer,
+    model,
+    x,
+    x_stamp,
+    y_stamp,
+    max_context,
+    pred_len,
+    clip=5,
+    T=1.0,
+    top_k=0,
+    top_p=0.99,
+    sample_count=5,
+    verbose=False,
+):
+    """Autoregressive inference with averaging across sample paths.
+
+    Returns:
+        np.ndarray: Predictions of shape [B, pred_len, 6] (averaged across sample_count paths).
+    """
+    with torch.no_grad():
+        x = torch.clip(x, -clip, clip)
+
+        device = x.device
+        x = (
+            x.unsqueeze(1)
+            .repeat(1, sample_count, 1, 1)
+            .reshape(-1, x.size(1), x.size(2))
+            .to(device)
+        )
+        x_stamp = (
+            x_stamp.unsqueeze(1)
+            .repeat(1, sample_count, 1, 1)
+            .reshape(-1, x_stamp.size(1), x_stamp.size(2))
+            .to(device)
+        )
+        y_stamp = (
+            y_stamp.unsqueeze(1)
+            .repeat(1, sample_count, 1, 1)
+            .reshape(-1, y_stamp.size(1), y_stamp.size(2))
+            .to(device)
+        )
+
+        x_token = tokenizer.encode(x, half=True)
+
+        initial_seq_len = x.size(1)
+        batch_size = x_token[0].size(0)
+        total_seq_len = initial_seq_len + pred_len
+        full_stamp = torch.cat([x_stamp, y_stamp], dim=1)
+
+        generated_pre = x_token[0].new_empty(batch_size, pred_len)
+        generated_post = x_token[1].new_empty(batch_size, pred_len)
+
+        pre_buffer = x_token[0].new_zeros(batch_size, max_context)
+        post_buffer = x_token[1].new_zeros(batch_size, max_context)
+        buffer_len = min(initial_seq_len, max_context)
+        if buffer_len > 0:
+            start_idx = max(0, initial_seq_len - max_context)
+            pre_buffer[:, :buffer_len] = x_token[0][:, start_idx : start_idx + buffer_len]
+            post_buffer[:, :buffer_len] = x_token[1][:, start_idx : start_idx + buffer_len]
+
+        if verbose:
+            ran = trange
+        else:
+            ran = range
+        for i in ran(pred_len):
+            current_seq_len = initial_seq_len + i
+            window_len = min(current_seq_len, max_context)
+
+            if current_seq_len <= max_context:
+                input_tokens = [pre_buffer[:, :window_len], post_buffer[:, :window_len]]
+            else:
+                input_tokens = [pre_buffer, post_buffer]
+
+            context_end = current_seq_len
+            context_start = max(0, context_end - max_context)
+            current_stamp = full_stamp[:, context_start:context_end, :].contiguous()
+
+            s1_logits, context = model.decode_s1(input_tokens[0], input_tokens[1], current_stamp)
+            s1_logits = s1_logits[:, -1, :]
+            sample_pre = sample_from_logits(
+                s1_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True
+            )
+
+            s2_logits = model.decode_s2(context, sample_pre)
+            s2_logits = s2_logits[:, -1, :]
+            sample_post = sample_from_logits(
+                s2_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True
+            )
+
+            generated_pre[:, i] = sample_pre.squeeze(-1)
+            generated_post[:, i] = sample_post.squeeze(-1)
+
+            if current_seq_len < max_context:
+                pre_buffer[:, current_seq_len] = sample_pre.squeeze(-1)
+                post_buffer[:, current_seq_len] = sample_post.squeeze(-1)
+            else:
+                pre_buffer.copy_(torch.roll(pre_buffer, shifts=-1, dims=1))
+                post_buffer.copy_(torch.roll(post_buffer, shifts=-1, dims=1))
+                pre_buffer[:, -1] = sample_pre.squeeze(-1)
+                post_buffer[:, -1] = sample_post.squeeze(-1)
+
+        full_pre = torch.cat([x_token[0], generated_pre], dim=1)
+        full_post = torch.cat([x_token[1], generated_post], dim=1)
+
+        context_start = max(0, total_seq_len - max_context)
+        input_tokens = [
+            full_pre[:, context_start:total_seq_len].contiguous(),
+            full_post[:, context_start:total_seq_len].contiguous(),
+        ]
+        z = tokenizer.decode(input_tokens, half=True)
+        z = z.reshape(-1, sample_count, z.size(1), z.size(2))
+        preds = z.cpu().numpy()
+        preds = np.mean(preds, axis=1)
+
+        return preds
+
+
+def auto_regressive_inference_raw(
+    tokenizer,
+    model,
+    x,
+    x_stamp,
+    y_stamp,
+    max_context,
+    pred_len,
+    clip=5,
+    T=1.0,
+    top_k=0,
+    top_p=0.99,
+    sample_count=5,
+    verbose=False,
+):
+    """Autoregressive inference returning per-sample paths (no averaging).
+
+    Returns:
+        np.ndarray: Predictions of shape [B, sample_count, total_seq_len, 6]
+        (where total_seq_len = input_len + pred_len).
+    """
+    with torch.no_grad():
+        x = torch.clip(x, -clip, clip)
+        device = x.device
+        x = (
+            x.unsqueeze(1)
+            .repeat(1, sample_count, 1, 1)
+            .reshape(-1, x.size(1), x.size(2))
+            .to(device)
+        )
+        x_stamp = (
+            x_stamp.unsqueeze(1)
+            .repeat(1, sample_count, 1, 1)
+            .reshape(-1, x_stamp.size(1), x_stamp.size(2))
+            .to(device)
+        )
+        y_stamp = (
+            y_stamp.unsqueeze(1)
+            .repeat(1, sample_count, 1, 1)
+            .reshape(-1, y_stamp.size(1), y_stamp.size(2))
+            .to(device)
+        )
+
+        x_token = tokenizer.encode(x, half=True)
+        initial_seq_len = x.size(1)
+        batch_size = x_token[0].size(0)
+        total_seq_len = initial_seq_len + pred_len
+        full_stamp = torch.cat([x_stamp, y_stamp], dim=1)
+
+        generated_pre = x_token[0].new_empty(batch_size, pred_len)
+        generated_post = x_token[1].new_empty(batch_size, pred_len)
+
+        pre_buffer = x_token[0].new_zeros(batch_size, max_context)
+        post_buffer = x_token[1].new_zeros(batch_size, max_context)
+        buffer_len = min(initial_seq_len, max_context)
+        if buffer_len > 0:
+            start_idx = max(0, initial_seq_len - max_context)
+            pre_buffer[:, :buffer_len] = x_token[0][:, start_idx : start_idx + buffer_len]
+            post_buffer[:, :buffer_len] = x_token[1][:, start_idx : start_idx + buffer_len]
+
+        for i in range(pred_len):
+            current_seq_len = initial_seq_len + i
+            window_len = min(current_seq_len, max_context)
+            if current_seq_len <= max_context:
+                input_tokens = [pre_buffer[:, :window_len], post_buffer[:, :window_len]]
+            else:
+                input_tokens = [pre_buffer, post_buffer]
+
+            context_end = current_seq_len
+            context_start = max(0, context_end - max_context)
+            current_stamp = full_stamp[:, context_start:context_end, :].contiguous()
+
+            s1_logits, context = model.decode_s1(input_tokens[0], input_tokens[1], current_stamp)
+            s1_logits = s1_logits[:, -1, :]
+            sample_pre = sample_from_logits(
+                s1_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True
+            )
+
+            s2_logits = model.decode_s2(context, sample_pre)
+            s2_logits = s2_logits[:, -1, :]
+            sample_post = sample_from_logits(
+                s2_logits, temperature=T, top_k=top_k, top_p=top_p, sample_logits=True
+            )
+
+            generated_pre[:, i] = sample_pre.squeeze(-1)
+            generated_post[:, i] = sample_post.squeeze(-1)
+
+            if current_seq_len < max_context:
+                pre_buffer[:, current_seq_len] = sample_pre.squeeze(-1)
+                post_buffer[:, current_seq_len] = sample_post.squeeze(-1)
+            else:
+                pre_buffer.copy_(torch.roll(pre_buffer, shifts=-1, dims=1))
+                post_buffer.copy_(torch.roll(post_buffer, shifts=-1, dims=1))
+                pre_buffer[:, -1] = sample_pre.squeeze(-1)
+                post_buffer[:, -1] = sample_post.squeeze(-1)
+
+        full_pre = torch.cat([x_token[0], generated_pre], dim=1)
+        full_post = torch.cat([x_token[1], generated_post], dim=1)
+
+        context_start = max(0, total_seq_len - max_context)
+        input_tokens = [
+            full_pre[:, context_start:total_seq_len].contiguous(),
+            full_post[:, context_start:total_seq_len].contiguous(),
+        ]
+        z = tokenizer.decode(input_tokens, half=True)
+        z = z.reshape(-1, sample_count, z.size(1), z.size(2))
+        preds = z.cpu().numpy()
+        return preds
+
+
+def calc_time_stamps(x_timestamp):
+    time_df = pd.DataFrame()
+    time_df["minute"] = x_timestamp.dt.minute
+    time_df["hour"] = x_timestamp.dt.hour
+    time_df["weekday"] = x_timestamp.dt.weekday
+    time_df["day"] = x_timestamp.dt.day
+    time_df["month"] = x_timestamp.dt.month
+    return time_df
+
+
+class KronosPredictor:
+    def __init__(self, model, tokenizer, device=None, max_context=512, clip=5):
+        self.tokenizer = tokenizer
+        self.model = model
+        self.max_context = max_context
+        self.clip = clip
+        self.price_cols = ["open", "high", "low", "close"]
+        self.vol_col = "volume"
+        self.amt_vol = "amount"
+        self.time_cols = ["minute", "hour", "weekday", "day", "month"]
+
+        # Auto-detect device if not specified
+        if device is None:
+            if torch.cuda.is_available():
+                device = "cuda:0"
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+
+        self.device = device
+
+        self.tokenizer = self.tokenizer.to(self.device)
+        self.model = self.model.to(self.device)
+
+    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose):
+
+        x_tensor = torch.from_numpy(np.array(x).astype(np.float32)).to(self.device)
+        x_stamp_tensor = torch.from_numpy(np.array(x_stamp).astype(np.float32)).to(self.device)
+        y_stamp_tensor = torch.from_numpy(np.array(y_stamp).astype(np.float32)).to(self.device)
+
+        preds = auto_regressive_inference(
+            self.tokenizer,
+            self.model,
+            x_tensor,
+            x_stamp_tensor,
+            y_stamp_tensor,
+            self.max_context,
+            pred_len,
+            self.clip,
+            T,
+            top_k,
+            top_p,
+            sample_count,
+            verbose,
+        )
+        preds = preds[:, -pred_len:, :]
+        return preds
+
+    def predict(
+        self,
+        df,
+        x_timestamp,
+        y_timestamp,
+        pred_len,
+        T=1.0,
+        top_k=0,
+        top_p=0.9,
+        sample_count=1,
+        verbose=True,
+    ):
+
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("Input must be a pandas DataFrame.")
+
+        if not all(col in df.columns for col in self.price_cols):
+            raise ValueError(f"Price columns {self.price_cols} not found in DataFrame.")
+
+        df = df.copy()
+        if self.vol_col not in df.columns:
+            df[self.vol_col] = 0.0  # Fill missing volume with zeros
+            df[self.amt_vol] = 0.0  # Fill missing amount with zeros
+        if self.amt_vol not in df.columns and self.vol_col in df.columns:
+            df[self.amt_vol] = df[self.vol_col] * df[self.price_cols].mean(axis=1)
+
+        if df[self.price_cols + [self.vol_col, self.amt_vol]].isnull().values.any():
+            raise ValueError("Input DataFrame contains NaN values in price or volume columns.")
+
+        x_time_df = calc_time_stamps(x_timestamp)
+        y_time_df = calc_time_stamps(y_timestamp)
+
+        x = df[self.price_cols + [self.vol_col, self.amt_vol]].values.astype(np.float32)
+        x_stamp = x_time_df.values.astype(np.float32)
+        y_stamp = y_time_df.values.astype(np.float32)
+
+        x_mean, x_std = np.mean(x, axis=0), np.std(x, axis=0)
+
+        x = (x - x_mean) / (x_std + 1e-5)
+        x = np.clip(x, -self.clip, self.clip)
+
+        x = x[np.newaxis, :]
+        x_stamp = x_stamp[np.newaxis, :]
+        y_stamp = y_stamp[np.newaxis, :]
+
+        preds = self.generate(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose)
+
+        preds = preds.squeeze(0)
+        preds = preds * (x_std + 1e-5) + x_mean
+
+        pred_df = pd.DataFrame(
+            preds, columns=self.price_cols + [self.vol_col, self.amt_vol], index=y_timestamp
+        )
+        return pred_df
+
+    def predict_batch(
+        self,
+        df_list,
+        x_timestamp_list,
+        y_timestamp_list,
+        pred_len,
+        T=1.0,
+        top_k=0,
+        top_p=0.9,
+        sample_count=1,
+        verbose=True,
+    ):
+        """
+        Perform parallel (batch) prediction on multiple time series. All series must have the same historical length and prediction length (pred_len).
+
+        Args:
+            df_list (List[pd.DataFrame]): List of input DataFrames, each containing price columns and optional volume/amount columns.
+            x_timestamp_list (List[pd.DatetimeIndex or Series]): List of timestamps corresponding to historical data, length should match the number of rows in each DataFrame.
+            y_timestamp_list (List[pd.DatetimeIndex or Series]): List of future prediction timestamps, length should equal pred_len.
+            pred_len (int): Number of prediction steps.
+            T (float): Sampling temperature.
+            top_k (int): Top-k filtering threshold.
+            top_p (float): Top-p (nucleus sampling) threshold.
+            sample_count (int): Number of parallel samples per series, automatically averaged internally.
+            verbose (bool): Whether to display autoregressive progress.
+
+        Returns:
+            List[pd.DataFrame]: List of prediction results in the same order as input, each DataFrame contains
+                                `open, high, low, close, volume, amount` columns, indexed by corresponding `y_timestamp`.
+        """
+        # Basic validation
+        if (
+            not isinstance(df_list, (list, tuple))
+            or not isinstance(x_timestamp_list, (list, tuple))
+            or not isinstance(y_timestamp_list, (list, tuple))
+        ):
+            raise ValueError(
+                "df_list, x_timestamp_list, y_timestamp_list must be list or tuple types."
+            )
+        if not (len(df_list) == len(x_timestamp_list) == len(y_timestamp_list)):
+            raise ValueError(
+                "df_list, x_timestamp_list, y_timestamp_list must have consistent lengths."
+            )
+
+        num_series = len(df_list)
+
+        x_list = []
+        x_stamp_list = []
+        y_stamp_list = []
+        means = []
+        stds = []
+        seq_lens = []
+        y_lens = []
+
+        for i in range(num_series):
+            df = df_list[i]
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError(f"Input at index {i} is not a pandas DataFrame.")
+            if not all(col in df.columns for col in self.price_cols):
+                raise ValueError(
+                    f"DataFrame at index {i} is missing price columns {self.price_cols}."
+                )
+
+            df = df.copy()
+            if self.vol_col not in df.columns:
+                df[self.vol_col] = 0.0
+                df[self.amt_vol] = 0.0
+            if self.amt_vol not in df.columns and self.vol_col in df.columns:
+                df[self.amt_vol] = df[self.vol_col] * df[self.price_cols].mean(axis=1)
+
+            if df[self.price_cols + [self.vol_col, self.amt_vol]].isnull().values.any():
+                raise ValueError(
+                    f"DataFrame at index {i} contains NaN values in price or volume columns."
+                )
+
+            x_timestamp = x_timestamp_list[i]
+            y_timestamp = y_timestamp_list[i]
+
+            x_time_df = calc_time_stamps(x_timestamp)
+            y_time_df = calc_time_stamps(y_timestamp)
+
+            x = df[self.price_cols + [self.vol_col, self.amt_vol]].values.astype(np.float32)
+            x_stamp = x_time_df.values.astype(np.float32)
+            y_stamp = y_time_df.values.astype(np.float32)
+
+            if x.shape[0] != x_stamp.shape[0]:
+                raise ValueError(
+                    f"Inconsistent lengths at index {i}: x has {x.shape[0]} vs x_stamp has {x_stamp.shape[0]}."
+                )
+            if y_stamp.shape[0] != pred_len:
+                raise ValueError(
+                    f"y_timestamp length at index {i} should equal pred_len={pred_len}, got {y_stamp.shape[0]}."
+                )
+
+            x_mean, x_std = np.mean(x, axis=0), np.std(x, axis=0)
+            x_norm = (x - x_mean) / (x_std + 1e-5)
+            x_norm = np.clip(x_norm, -self.clip, self.clip)
+
+            x_list.append(x_norm)
+            x_stamp_list.append(x_stamp)
+            y_stamp_list.append(y_stamp)
+            means.append(x_mean)
+            stds.append(x_std)
+
+            seq_lens.append(x_norm.shape[0])
+            y_lens.append(y_stamp.shape[0])
+
+        # Require all series to have consistent historical and prediction lengths for batch processing
+        if len(set(seq_lens)) != 1:
+            raise ValueError(
+                f"Parallel prediction requires all series to have consistent historical lengths, got: {seq_lens}"
+            )
+        if len(set(y_lens)) != 1:
+            raise ValueError(
+                f"Parallel prediction requires all series to have consistent prediction lengths, got: {y_lens}"
+            )
+
+        x_batch = np.stack(x_list, axis=0).astype(np.float32)  # (B, seq_len, feat)
+        x_stamp_batch = np.stack(x_stamp_list, axis=0).astype(np.float32)  # (B, seq_len, time_feat)
+        y_stamp_batch = np.stack(y_stamp_list, axis=0).astype(
+            np.float32
+        )  # (B, pred_len, time_feat)
+
+        preds = self.generate(
+            x_batch, x_stamp_batch, y_stamp_batch, pred_len, T, top_k, top_p, sample_count, verbose
+        )
+        # preds: (B, pred_len, feat)
+
+        pred_dfs = []
+        for i in range(num_series):
+            preds_i = preds[i] * (stds[i] + 1e-5) + means[i]
+            pred_df = pd.DataFrame(
+                preds_i,
+                columns=self.price_cols + [self.vol_col, self.amt_vol],
+                index=y_timestamp_list[i],
+            )
+            pred_dfs.append(pred_df)
+
+        return pred_dfs
+
+
+# ── KronosModel: high-level model wrapper ─────────────────────────────
+# Implements the BaseModel interface (predict, load, predict_batch, __call__).
+# Does NOT formally inherit from BaseModel to avoid circular imports with
+# src.core.registry (which imports KronosModel). The registry stores class
+# references only; ABC registration is handled by duck typing.
+
+
+class KronosModel:
+    def __init__(
+        self,
+        model_name: str = "NeoQuasar/Kronos-mini",
+        tokenizer_name: str = "NeoQuasar/Kronos-Tokenizer-2k",
+        device: str | None = None,
+        max_context: int = 2048,
+        session_filter: bool = True,
+        main_session_start: str = "10:00",
+        main_session_end: str = "18:40",
+        freq: str = "5min",
+    ):
+        self.model_name = model_name
+        self.tokenizer_name = tokenizer_name
+        self.device = device
+        self.max_context = max_context
+        self.session_filter = session_filter
+        self.main_session_start = main_session_start
+        self.main_session_end = main_session_end
+        self.freq = freq
+        self._loaded = False
+        self.tokenizer = None
+        self.model = None
+        self.predictor = None
+
+    def load(self):
+        from src.core.kronos.model import Kronos
+        from src.core.kronos.tokenizer import KronosTokenizer
+
+        self.tokenizer = KronosTokenizer.from_pretrained(self.tokenizer_name)
+        self.model = Kronos.from_pretrained(self.model_name)
+        self.predictor = KronosPredictor(
+            self.model, self.tokenizer, device=self.device, max_context=self.max_context
+        )
+        self._loaded = True
+
+    def _filter_session(self, df: pd.DataFrame) -> pd.DataFrame:
+        if not self.session_filter:
+            return df
+        start_t = pd.Timestamp(self.main_session_start).time()
+        end_t = pd.Timestamp(self.main_session_end).time()
+        mask = (df.index.time >= start_t) & (df.index.time <= end_t)
+        return df[mask]
+
+    def _validate_df(self, df: pd.DataFrame):
+        if not isinstance(df.index, pd.DatetimeIndex):
+            raise ValueError(
+                f"DataFrame index must be DatetimeIndex, got {type(df.index).__name__}"
+            )
+        required = {"open", "high", "low", "close"}
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"Missing required columns: {sorted(missing)}. Found: {sorted(df.columns)}"
+            )
+        if len(df) == 0:
+            raise ValueError("DataFrame is empty after session filtering")
+
+    def _resolve_freq(self, df: pd.DataFrame) -> str:
+        inferred = pd.infer_freq(df.index)
+        if inferred is not None:
+            return inferred
+        if len(df) >= 2:
+            inferred = pd.infer_freq(df.index[: min(100, len(df))])
+            if inferred is not None:
+                return inferred
+        return self.freq
+
+    def predict(
+        self,
+        df: pd.DataFrame,
+        pred_len: int,
+        T: float = 1.0,
+        top_p: float = 0.9,
+        sample_count: int = 1,
+    ) -> pd.DataFrame:
+        samples = self.predict_samples(df, pred_len, T, 0, top_p, sample_count)
+        mean_preds = np.mean(samples, axis=0)
+        return pd.DataFrame(
+            mean_preds,
+            columns=self.predictor.price_cols + [self.predictor.vol_col, self.predictor.amt_vol],
+        )
+
+    def predict_samples(
+        self,
+        df: pd.DataFrame,
+        pred_len: int,
+        T: float = 1.0,
+        top_k: int = 0,
+        top_p: float = 0.9,
+        sample_count: int = 5,
+    ) -> np.ndarray:
+        if not self._loaded:
+            self.load()
+
+        df = self._filter_session(df).copy()
+        self._validate_df(df)
+
+        price_cols = self.predictor.price_cols
+        vol_col = self.predictor.vol_col
+        amt_col = self.predictor.amt_vol
+        clip = self.predictor.clip
+
+        if vol_col not in df.columns:
+            df[vol_col] = 0.0
+            df[amt_col] = 0.0
+        if amt_col not in df.columns and vol_col in df.columns:
+            df[amt_col] = df[vol_col] * df[price_cols].mean(axis=1)
+
+        x_timestamp = df.index.to_series()
+        last_ts = df.index[-1]
+        freq = self._resolve_freq(df)
+
+        y_timestamp = pd.date_range(
+            start=last_ts + pd.Timedelta(freq),
+            periods=pred_len,
+            freq=freq,
+            tz=last_ts.tz if hasattr(last_ts, "tz") else None,
+        )
+
+        x_time_df = calc_time_stamps(x_timestamp)
+        y_time_df = calc_time_stamps(pd.Series(y_timestamp))
+
+        x = df[price_cols + [vol_col, amt_col]].values.astype(np.float32)
+        x_stamp = x_time_df.values.astype(np.float32)
+        y_stamp = y_time_df.values.astype(np.float32)
+
+        x_mean, x_std = np.mean(x, axis=0), np.std(x, axis=0)
+        x = (x - x_mean) / (x_std + 1e-5)
+        x = np.clip(x, -clip, clip)
+
+        x = x[np.newaxis, :]
+        x_stamp = x_stamp[np.newaxis, :]
+        y_stamp = y_stamp[np.newaxis, :]
+
+        x_tensor = torch.from_numpy(x).to(self.predictor.device)
+        x_stamp_tensor = torch.from_numpy(x_stamp).to(self.predictor.device)
+        y_stamp_tensor = torch.from_numpy(y_stamp).to(self.predictor.device)
+
+        preds_all = auto_regressive_inference_raw(
+            self.tokenizer,
+            self.model,
+            x_tensor,
+            x_stamp_tensor,
+            y_stamp_tensor,
+            self.max_context,
+            pred_len,
+            clip,
+            T,
+            top_k,
+            top_p,
+            sample_count,
+            verbose=False,
+        )
+        preds_all = preds_all[:, :, -pred_len:, :]
+        preds_all = preds_all * (x_std + 1e-5) + x_mean
+        return preds_all.squeeze(0)
+
+    def predict_samples_batch(
+        self,
+        df_list: list[pd.DataFrame],
+        pred_len: int,
+        T: float = 1.0,
+        top_k: int = 0,
+        top_p: float = 0.9,
+        sample_count: int = 5,
+    ) -> list[np.ndarray]:
+        if not self._loaded:
+            self.load()
+
+        if not isinstance(df_list, (list, tuple)):
+            raise ValueError("df_list must be a list or tuple of DataFrames")
+        if len(df_list) == 0:
+            raise ValueError("df_list is empty")
+
+        price_cols = self.predictor.price_cols
+        vol_col = self.predictor.vol_col
+        amt_col = self.predictor.amt_vol
+        clip = self.predictor.clip
+
+        x_list = []
+        x_stamp_list = []
+        y_stamp_list = []
+        means = []
+        stds = []
+        seq_lens = []
+
+        for df in df_list:
+            df_f = self._filter_session(df).copy()
+            self._validate_df(df_f)
+
+            if vol_col not in df_f.columns:
+                df_f[vol_col] = 0.0
+                df_f[amt_col] = 0.0
+            if amt_col not in df_f.columns and vol_col in df_f.columns:
+                df_f[amt_col] = df_f[vol_col] * df_f[price_cols].mean(axis=1)
+
+            x_timestamp = df_f.index.to_series()
+            last_ts = df_f.index[-1]
+            freq = self._resolve_freq(df_f)
+            y_timestamp = pd.date_range(
+                start=last_ts + pd.Timedelta(freq),
+                periods=pred_len,
+                freq=freq,
+                tz=last_ts.tz if hasattr(last_ts, "tz") else None,
+            )
+
+            x_time_df = calc_time_stamps(x_timestamp)
+            y_time_df = calc_time_stamps(pd.Series(y_timestamp))
+
+            x = df_f[price_cols + [vol_col, amt_col]].values.astype(np.float32)
+            x_stamp = x_time_df.values.astype(np.float32)
+            y_stamp = y_time_df.values.astype(np.float32)
+
+            seq_lens.append(x.shape[0])
+            x_mean, x_std = np.mean(x, axis=0), np.std(x, axis=0)
+            x_norm = (x - x_mean) / (x_std + 1e-5)
+            x_norm = np.clip(x_norm, -clip, clip)
+
+            x_list.append(x_norm)
+            x_stamp_list.append(x_stamp)
+            y_stamp_list.append(y_stamp)
+            means.append(x_mean)
+            stds.append(x_std)
+
+        if len(set(seq_lens)) != 1:
+            raise ValueError(f"All series must have same historical length, got: {set(seq_lens)}")
+
+        x_batch = np.stack(x_list, axis=0).astype(np.float32)
+        x_stamp_batch = np.stack(x_stamp_list, axis=0).astype(np.float32)
+        y_stamp_batch = np.stack(y_stamp_list, axis=0).astype(np.float32)
+
+        x_tensor = torch.from_numpy(x_batch).to(self.predictor.device)
+        x_stamp_tensor = torch.from_numpy(x_stamp_batch).to(self.predictor.device)
+        y_stamp_tensor = torch.from_numpy(y_stamp_batch).to(self.predictor.device)
+
+        preds_all = auto_regressive_inference_raw(
+            self.tokenizer,
+            self.model,
+            x_tensor,
+            x_stamp_tensor,
+            y_stamp_tensor,
+            self.max_context,
+            pred_len,
+            clip,
+            T,
+            top_k,
+            top_p,
+            sample_count,
+            verbose=False,
+        )
+        # preds_all: (B, sample_count, pred_len, 6)
+        preds_all = preds_all[:, :, -pred_len:, :]
+        B = len(df_list)
+        results = []
+        for i in range(B):
+            preds_i = preds_all[i] * (stds[i] + 1e-5) + means[i]
+            results.append(preds_i)
+        return results
+
+    def predict_batch(
+        self,
+        df_list: list[pd.DataFrame],
+        pred_len: int,
+        T: float = 1.0,
+        top_p: float = 0.9,
+        sample_count: int = 1,
+    ) -> list[pd.DataFrame]:
+        if not self._loaded:
+            self.load()
+
+        if not isinstance(df_list, (list, tuple)):
+            raise ValueError("df_list must be a list or tuple of DataFrames")
+        if len(df_list) == 0:
+            raise ValueError("df_list is empty")
+
+        filtered_dfs = []
+        x_timestamp_list = []
+        y_timestamp_list = []
+
+        for df in df_list:
+            df_f = self._filter_session(df).copy()
+            self._validate_df(df_f)
+            filtered_dfs.append(df_f)
+
+            x_timestamp_list.append(df_f.index.to_series())
+
+            last_ts = df_f.index[-1]
+            freq = self._resolve_freq(df_f)
+
+            y_ts = pd.date_range(
+                start=last_ts + pd.Timedelta(freq),
+                periods=pred_len,
+                freq=freq,
+                tz=last_ts.tz if hasattr(last_ts, "tz") else None,
+            )
+            y_timestamp_list.append(y_ts)
+
+        return self.predictor.predict_batch(
+            df_list=filtered_dfs,
+            x_timestamp_list=x_timestamp_list,
+            y_timestamp_list=y_timestamp_list,
+            pred_len=pred_len,
+            T=T,
+            top_p=top_p,
+            sample_count=sample_count,
+            verbose=False,
+        )
+
+    def __call__(self, *args, **kwargs):
+        return self.predict(*args, **kwargs)

@@ -1,0 +1,37 @@
+#!/bin/bash
+# Pre-commit hook: validate commit message format
+# Kronos Alpha — Conventional Commits with M-XXX scope
+# Usage: ln -s ../../.githooks/commit-msg .git/hooks/commit-msg
+
+COMMIT_MSG=$(cat "$1")
+
+# Rule 1: First line must match: <type>(M-XXX): <description>
+FIRST_LINE=$(head -n 1 "$1")
+PATTERN='^(feat|fix|refactor|docs|test|ci|chore|perf|revert)\(M-[A-Z]+(-[A-Z0-9]+)*\): .+'
+
+if ! echo "$FIRST_LINE" | grep -qE "$PATTERN"; then
+    echo "ERROR: Commit message first line must match: <type>(M-XXX): <description>"
+    echo "  Valid types: feat, fix, refactor, docs, test, ci, chore, perf, revert"
+    echo "  Valid module IDs: M-FETCH, M-PREPROCESS, M-TOKENIZE, M-DATASET, M-FINE-TUNE,"
+    echo "    M-PREDICT, M-BACKTEST, M-METRICS, M-CONFIG, M-DOCS, M-INFRA, M-CI,"
+    echo "    M-SIGNAL-*, M-STRATEGY-*, M-EVALUATE, M-CALIBRATE, M-OUTPUT, M-SETUP"
+    echo ""
+    echo "  Example: feat(M-FETCH): add --resume flag"
+    echo "  Multi-module: feat(M-FETCH,M-PREPROCESS): unified manifest schema"
+    exit 1
+fi
+
+# Rule 2: No secret patterns in commit message
+SECRET_PATTERNS='(hf_[a-zA-Z0-9]{34}|sk-[a-zA-Z0-9]{32,}|api_key[=:]\s*[a-zA-Z0-9]|token[=:]\s*[a-zA-Z0-9]{20,}|-----BEGIN)'
+if echo "$COMMIT_MSG" | grep -qE "$SECRET_PATTERNS"; then
+    echo "ERROR: Commit message contains potential secret/token. Use secret IDs only."
+    exit 1
+fi
+
+# Rule 3: First line <= 72 chars (warning only)
+FIRST_LINE_LEN=$(echo "$FIRST_LINE" | wc -c)
+if [ "$FIRST_LINE_LEN" -gt 73 ]; then
+    echo "WARNING: First line is $((FIRST_LINE_LEN - 1)) chars (recommended <= 72)"
+fi
+
+exit 0

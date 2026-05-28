@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grace:requirements xmlns:grace="https://grace.ai/schema/requirements">
+  <project>Kronos for Alpha</project>
+  <goal>Maximize financial asset price prediction metrics for MOEX (Moscow Exchange) instruments via transformer-based time-series modeling, cross-sectional z-score ranking, and multi-strategy backtesting.</goal>
+
+  <scope>
+    <instrument>Kronos transformer family (mini/small) — VQ-VAE tokenizer + hierarchical dual-token predictor</instrument>
+    <data_source>MOEX ISS HTTP API — 10-min OHLCV candles, 20 liquid stocks + IMOEX index</data_source>
+    <infrastructure>Modal GPU cloud (A100 40GB for training, T4 for inference), local CPU for preprocessing</infrastructure>
+    <deliverable>Cross-sectional alpha signal: top-3 long, bottom-2 short, walk-forward validated Sharpe &gt;= 0.5</deliverable>
+  </scope>
+
+  <use_cases>
+    <use_case id="UC-1">Fine-tune Kronos-small on MOEX 21-asset data (CE loss on discrete tokens)</use_case>
+    <use_case id="UC-2">Autoregressive inference: Monte Carlo sampling (T=0.6, N=4-5) → OHLCV paths</use_case>
+    <use_case id="UC-3">Signal generation: 7 signal families (atoms, ICT, volatility, VWAP, fractal, divergence, bars)</use_case>
+    <use_case id="UC-4">Strategy execution: 8 strategies (vanilla + BB/OB/VWAP/volatility filters) via shared engine</use_case>
+    <use_case id="UC-5">Walk-forward validation: non-overlapping windows (step=pred_len=6), strict temporal split</use_case>
+    <use_case id="UC-6">Calibration: 4-pass hyperparameter sweep (pred_len, T, consensus, TP/SL)</use_case>
+    <use_case id="UC-7">Template adaptation: reference strategies/experiments for new instruments/assets</use_case>
+  </use_cases>
+
+  <non_goals>
+    <non_goal>Real-time trading execution</non_goal>
+    <non_goal>Reinforcement learning agents</non_goal>
+    <non_goal>Sentiment/news analysis</non_goal>
+    <non_goal>Non-MOEX markets (extensible but not initial scope)</non_goal>
+  </non_goals>
+
+  <success_criteria>
+    <criterion id="SC-1">Phase 0 tokenizer quality gates: codebook_util &gt;= 200, entropy &gt;= 5.0, recon_mse &lt;= 0.01</criterion>
+    <criterion id="SC-2">Phase 1 fine-tune: validation CE loss decreases and converges within 30 epochs</criterion>
+    <criterion id="SC-3">Phase 2 backtest: Sharpe &gt;= 0.5, Win Rate &gt;= 52%, MaxDD &lt;= 25%, PSR &gt;= 0.7, IC mean &gt;= 0.02</criterion>
+    <criterion id="SC-4">Leakage audit: 8/8 temporal/feature/consensus leakage tests passed</criterion>
+    <criterion id="SC-5">GRACE integrity: grace lint --profile autonomous passes without errors</criterion>
+  </success_criteria>
+
+  <revision>1.0</revision>
+  <date>2026-05-28</date>
+</grace:requirements>

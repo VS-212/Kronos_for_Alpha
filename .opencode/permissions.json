@@ -1,0 +1,21 @@
+{
+  "deny": [
+    {"path": "~/.ssh/kronos_alpha_ed25519", "action": "read"},
+    {"path": "~/.ssh/kronos_alpha_ed25519.pub", "action": "read"},
+    {"path": "~/.ssh/id_*", "action": "read"},
+    {"path": "~/.ssh/authorized_keys", "action": "read"},
+    {"path": "~/.ssh/config", "action": "write"},
+    {"path": "**/.env", "action": "read"},
+    {"path": "**/*.secret", "action": "read"},
+    {"path": "**/modal_secrets.yaml", "action": "read"},
+    {"path": "**/wandb/**", "action": "read"}
+  ],
+  "allow": [
+    {"path": "/home/aaa/Kronos_for_Alpha/**", "action": "*"},
+    {"path": "/tmp/opencode/**", "action": "*"},
+    {"path": "/home/aaa/kronos-artifact/**", "action": "read"},
+    {"path": "/home/aaa/kronos-alpha/**", "action": "read"},
+    {"path": "/home/aaa/kronos-artifact/alpha/**", "action": "read"},
+    {"path": "/home/aaa/kronos-alpha/alpha/**", "action": "read"}
+  ]
+}

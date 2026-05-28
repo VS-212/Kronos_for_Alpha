@@ -1,0 +1,15 @@
+{
+  "include": ["src", "tests", "scripts"],
+  "exclude": ["**/__pycache__", "**/.venv", "templates", "data", "checkpoints", "notebooks"],
+  "typeCheckingMode": "strict",
+  "reportMissingTypeStubs": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownVariableType": false,
+  "reportPrivateUsage": "warning",
+  "reportUnusedImport": "warning",
+  "reportUnusedVariable": "warning",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
+  "extraPaths": ["src"]
+}

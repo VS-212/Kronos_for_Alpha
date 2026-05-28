@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grace:technology xmlns:grace="https://grace.ai/schema/technology">
+  <stack>
+    <language>Python 3.12</language>
+    <ml_framework>PyTorch 2.0+</ml_framework>
+    <model_family>Kronos (NeoQuasar) — VQ-VAE tokenizer + hierarchical Transformer predictor</model_family>
+    <model_hub>HuggingFace Hub (gated models, HF_TOKEN required)</model_hub>
+    <gpu_cloud>Modal (serverless GPU)</gpu_cloud>
+    <data_format>Parquet (raw/processed), NumPy .npy (tokens), JSON (manifests)</data_format>
+    <package_manager>pip + pyproject.toml</package_manager>
+    <linting>Ruff (linter + formatter), MyPy (type checker), Pyright (LSP)</linting>
+    <version_control>Git (agent-protected SSH ed25519 key, Conventional Commits with M-XXX scope)</version_control>
+  </stack>
+
+  <gpu_routing>
+    <phase id="0" name="tokenizer_quality" gpu="CPU + T4">Tokenization validation, may OOM on T4 → fallback to CPU</phase>
+    <phase id="1" name="finetune" gpu="A100 40GB">Batch=12, grad_accum=2, bf16, ~4.1M params, VRAM ~10-12GB</phase>
+    <phase id="2" name="inference" gpu="T4 16GB">Batch prediction, VRAM &lt; 0.5GB per inference call</phase>
+    <phase id="3" name="backtest" gpu="CPU">Strategy simulation, no GPU needed</phase>
+  </gpu_routing>
+
+  <dependencies>
+    <runtime>
+      <package>torch</package>
+      <package>numpy</package>
+      <package>pandas</package>
+      <package>pyarrow</package>
+      <package>scipy</package>
+      <package>einops</package>
+      <package>safetensors</package>
+      <package>huggingface_hub</package>
+      <package>apimoex</package>
+      <package>requests</package>
+      <package>pyyaml</package>
+    </runtime>
+    <dev>
+      <package>ruff</package>
+      <package>mypy</package>
+      <package>pytest</package>
+      <package>pytest-cov</package>
+    </dev>
+    <cloud>
+      <package>modal</package>
+    </cloud>
+  </dependencies>
+
+  <constraints>
+    <constraint>No asset-ID embedding — per-window z-score removes price level</constraint>
+    <constraint>Tokenizer frozen during fine-tune (Phase 0 quality gate must pass first)</constraint>
+    <constraint>Strict temporal split: train &lt; val &lt; test, no leakage</constraint>
+    <constraint>All parameters in global.yaml — no hardcoded values in code</constraint>
+    <constraint>CLI modules must support: Resume, Retry, Idempotent, Validate</constraint>
+  </constraints>
+
+  <revision>1.0</revision>
+  <date>2026-05-28</date>
+</grace:technology>

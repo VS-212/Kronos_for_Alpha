@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grace:development-plan xmlns:grace="https://grace.ai/schema/development-plan">
+  <project>Kronos for Alpha</project>
+  <revision>1.0</revision>
+  <date>2026-05-28</date>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 0: Tokenizer Quality Gate (CPU + T4, ~2h)                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <phase id="0" name="tokenizer_quality" status="preflight">
+    <description>Validate KronosTokenizer-2k on MOEX 21-asset data. Must pass all quality gates before proceeding to fine-tune. Failure triggers contingency: retrain tokenizer on MOEX (8+8 bit) or fall back to raw OHLCV projection.</description>
+
+    <step id="P0.1" order="1" module="M-TOKENIZE" action="Download KronosTokenizer-2k from HuggingFace" file="src/core/kronos/tokenizer.py" time="0.1h" gate="Model loaded" depends_on="" />
+    <step id="P0.2" order="2" module="M-TOKENIZE" action="Tokenize MOEX val set (160k bars)" file="src/core/kronos/tokenizer.py" time="0.5h" gate="No crash" depends_on="P0.1" />
+    <step id="P0.3" order="3" module="M-TOKENIZE" action="Check codebook utilization: count unique s1+s2 IDs across all bars" file="src/core/kronos/tokenizer.py" time="0.1h" gate=">= 200 unique codes (20% of 1024)" depends_on="P0.2" />
+    <step id="P0.4" order="4" module="M-TOKENIZE" action="Check token entropy: H = -Sum p(i)*log2(p(i))" file="src/core/kronos/tokenizer.py" time="0.1h" gate=">= 5.0 bits (out of 10 max)" depends_on="P0.2" />
+    <step id="P0.5" order="5" module="M-TOKENIZE" action="Check reconstruction MSE: tokenizer.decode(encode(x)) - x" file="src/core/kronos/tokenizer.py" time="0.3h" gate="<= 0.01" depends_on="P0.2" />
+    <step id="P0.6" order="6" module="M-TOKENIZE" action="Per-asset utilization: verify no asset has < 50 unique codes" file="src/core/kronos/tokenizer.py" time="0.2h" gate="All 21 assets >= 50 codes" depends_on="P0.3" />
+    <step id="P0.7" order="7" module="M-TOKENIZE" action="Cross-correlation matrix: 21-asset return correlations" file="src/core/kronos/tokenizer.py" time="0.1h" gate="RMS < 0.5 (assets are differentiable)" depends_on="P0.2" />
+
+    <contingency trigger="P0.3-P0.6 FAIL">
+      <option id="A" name="retrain_tokenizer">Retrain tokenizer on MOEX data (8+8 bit, ~10h A100)</option>
+      <option id="B" name="fallback_projection">Abandon VQ → use raw OHLCV (normalized) + Kronos predictor (tokenizer.encode replaced by linear projection to codebook_dim)</option>
+    </contingency>
+    <contingency trigger="P0.7 FAIL">Consider sector-neutral z-scoring or reduce to fewer, more diverse assets.</contingency>
+  </phase>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 1: Fine-tune Kronos-small (~1h, A100)                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <phase id="1" name="finetune" status="blocked_by_phase_0">
+    <description>Fine-tune Kronos-small predictor on MOEX tokens (tokenizer frozen). CE loss on s1+s2 tokens. ~70k training windows across 21 assets.</description>
+
+    <step id="P1.1" order="8" module="M-FINE-TUNE" action="Download Kronos-small from HuggingFace" file="src/core/kronos/fine_tune.py" time="0.1h" gate="Model loaded" depends_on="P0.3,P0.4,P0.5,P0.6" />
+    <step id="P1.2" order="9" module="M-DATASET" action="Create PredictorDataset: L=512, shift=1, stride=8, batch=12" file="src/data/dataset.py" time="0.1h" gate="Shapes verified" depends_on="P0.6" />
+    <step id="P1.3" order="10" module="M-FINE-TUNE" action="Train session 1 (epoch 1-15)" file="src/core/kronos/fine_tune.py" time="~0.5h" gate="Val CE decreases" depends_on="P1.1,P1.2" />
+    <step id="P1.4" order="11" module="M-FINE-TUNE" action="Save checkpoint kronos_moex_epoch_15.pt to Modal volume" file="src/core/kronos/fine_tune.py" time="0.05h" gate="Saved" depends_on="P1.3" />
+    <step id="P1.5" order="12" module="M-FINE-TUNE" action="Resume: load best, continue to epoch 16-30" file="src/core/kronos/fine_tune.py" time="~0.5h" gate="Val CE converges" depends_on="P1.4" />
+    <step id="P1.6" order="13" module="M-FINE-TUNE" action="Save kronos_moex_best.pt (val CE minimum)" file="src/core/kronos/fine_tune.py" time="0.05h" gate="Saved" depends_on="P1.5" />
+
+    <training_config>
+      <param name="model">NeoQuasar/Kronos-small</param>
+      <param name="frozen_modules">Tokenizer (eval mode + no_grad + excluded from optimizer)</param>
+      <param name="trainable_modules">HierarchicalEmbedding, Transformer, DualHead, TemporalEmbedding</param>
+      <param name="batch_size">12</param>
+      <param name="grad_accum">2 (effective=24)</param>
+      <param name="lr">1e-5</param>
+      <param name="scheduler">CosineAnnealing</param>
+      <param name="weight_decay">0.1</param>
+      <param name="grad_clip">3.0</param>
+      <param name="precision">bf16</param>
+      <param name="epochs">30</param>
+      <param name="gpu">A100 (40GB)</param>
+      <param name="vram">~10-12GB</param>
+      <param name="early_stop">val CE plateau: delta &lt;= 0.001 for 5 evals</param>
+    </training_config>
+
+    <checkpoint_protocol>
+      <checkpoint type="epoch" freq="3" pattern="kronos_moex_epoch_N.pt" />
+      <checkpoint type="best" pattern="kronos_moex_best.pt" trigger="val_CE improves" />
+      <checkpoint type="heartbeat" freq="100" pattern="kronos_moex_latest.pt" purpose="survive spot preemption" />
+      <checkpoint type="history" pattern="history.json" keys="train_ce, val_ce, epoch, steps" />
+    </checkpoint_protocol>
+  </phase>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 2: Inference + Backtest (~2h, T4)                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <phase id="2" name="inference_backtest" status="blocked_by_phase_1">
+    <description>Generate predictions via autoregressive MC sampling, then run cross-sectional backtest with walk-forward validation.</description>
+
+    <step id="P2.1" order="14" module="M-PREDICT" action="Load kronos_moex_best.pt + KronosTokenizer-2k" file="src/core/kronos/predictor.py" time="0.1h" gate="Loaded" depends_on="P1.6" />
+    <step id="P2.2" order="15" module="M-PREDICT" action="Autoregressive inference on test (21 x ~8.7k bars)" file="src/core/kronos/predictor.py" time="1.5h" gate="Per-asset OHLCV saved" depends_on="P2.1" />
+    <step id="P2.3" order="16" module="M-BACKTEST" action="Cross-sectional backtest: top-3 long, bot-2 short, session enforcement" file="src/evaluation/backtest.py" time="0.5h" gate="" depends_on="P2.2" />
+    <step id="P2.4" order="17" module="M-METRICS" action="Compute metrics: Sharpe, MaxDD, WR, PSR, Calmar, IC" file="src/evaluation/metrics.py" time="0.1h" gate="" depends_on="P2.3" />
+    <step id="P2.5" order="18" module="M-BACKTEST" action="Walk-forward validation: re-run on val split, compare val vs test" file="src/evaluation/backtest.py" time="0.5h" gate="Val ~= Test (no overfit)" depends_on="P2.4" />
+
+    <inference_config>
+      <param name="lookback">506 bars (~10 trading days)</param>
+      <param name="pred_len">6 bars (1 hour)</param>
+      <param name="sample_count">4-5 (MC paths)</param>
+      <param name="temperature">0.6</param>
+      <param name="top_p">0.9</param>
+      <param name="top_k">0 (disabled)</param>
+      <param name="gpu">T4 (16GB)</param>
+      <param name="latency_per_asset">~0.45s serial, ~1.5s batched (batch=21)</param>
+    </inference_config>
+
+    <backtest_config>
+      <param name="long_assets">3 (top by z-score)</param>
+      <param name="short_assets">2 (bottom by z-score)</param>
+      <param name="stop_loss">-1.5%</param>
+      <param name="take_profit">+2.5%</param>
+      <param name="commission">0.03%</param>
+      <param name="slippage">0.01%</param>
+      <param name="session_entry">10:00-18:10 MSK</param>
+      <param name="force_exit">18:35 MSK</param>
+      <param name="walk_forward_step">6 bars (non-overlapping)</param>
+    </backtest_config>
+
+    <metrics_gates>
+      <gate metric="sharpe" min="0.5" stop-if="&lt; 0.0" action="Go to Phase 3 iteration" />
+      <gate metric="win_rate" min="0.52" stop-if="&lt; 0.45" action="Check prediction bias" />
+      <gate metric="max_drawdown" max="0.25" stop-if="&gt; 0.50" action="Reduce position size" />
+      <gate metric="psr" min="0.7" stop-if="&lt; 0.3" action="Sharpe not robust → more MC" />
+      <gate metric="ic_mean" min="0.02" stop-if="&lt; 0.0" action="Weak signal → Phase 3" />
+    </metrics_gates>
+  </phase>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PHASE 3: Iteration (contingency if Sharpe < 0.3)                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <phase id="3" name="iteration" status="contingency">
+    <description>Contingency loop triggered if backtest Sharpe is below 0.3. Systematic diagnosis and fix of root causes.</description>
+
+    <iteration id="I3.1" symptom="Sharpe &lt; 0" cause="Tokenizer mismatch" fix="Retrain tokenizer on MOEX (8+8 bit)" priority="P0" />
+    <iteration id="I3.2" symptom="Sharpe 0-0.3" cause="Weak signal" fix="Increase sample_count to 8, ensemble per-bar" priority="P1" />
+    <iteration id="I3.3" symptom="High MaxDD" cause="Stop-loss too wide" fix="Reduce SL to 1.0%, add trailing stop" priority="P1" />
+    <iteration id="I3.4" symptom="WR &lt; 50%" cause="Random predictions" fix="Check token entropy — if low → tokenizer bad" priority="P1" />
+    <iteration id="I3.5" symptom="Predictions too similar across assets" cause="High correlation" fix="Sector-neutral z-score: subtract sector mean" priority="P1" />
+    <iteration id="I3.6" symptom="Overtraded" cause="Pred_len too short" fix="Increase to 12 bars (2h), reduce turnover" priority="P2" />
+    <iteration id="I3.7" symptom="Regime shift (val Sharpe >> test Sharpe)" cause="Overfit to bull period" fix="Add dropout 0.2, reduce epochs to 15" priority="P2" />
+    <iteration id="I3.8" symptom="Low cross-sectional IC" cause="Ranking noise" fix="Add ranking loss (ListMLE or pairwise) to fine-tune" priority="P2" />
+  </phase>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PIPELINE MODULES                                                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <modules>
+    <!-- Pipeline (7) -->
+    <module id="M-FETCH" name="MOEX Data Fetcher" file="src/data/fetcher.py" phase="data" status="✅ ready" contract="--start {date} --end {date} → data/v3/raw/{ticker}.parquet × 21 + manifest.json" cli="python -m src.data.fetcher --start 2023-01-01 --end 2026-05-01" depends_on="" guarantees="Idempotent, Resume, Rate-limit backoff, Retry (5, exp 2^n×2s)" />
+
+    <module id="M-PREPROCESS" name="Session Filter + Split + Normalize" file="src/data/preprocess.py" phase="0" status="❌ future" contract="data/v3/raw/*.parquet + manifest.json → data/v3/processed/{ticker}_{split}.npy × (21×3) + manifest.json" cli="python -m src.data.preprocess --input data/v3/raw --output data/v3/processed" depends_on="M-FETCH" guarantees="Idempotent, Per-window z-score (no global leak), Validates input manifest" />
+
+    <module id="M-TOKENIZE" name="Kronos VQ-VAE Tokenizer" file="src/core/kronos/tokenizer.py" phase="0" status="✅ ready" contract="data/v3/processed/{ticker}_{split}.npy → data/v3/tokens/{ticker}_{split}.npy + manifest.json (with codebook_util, entropy, recon_mse)" cli="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" depends_on="M-PREPROCESS, M-KRONOS-TOKENIZER" guarantees="Idempotent, Quality gate validation, Phase 0 gates MUST pass before Phase 1" />
+
+    <module id="M-DATASET" name="Predictor Sliding Window Dataset" file="src/data/dataset.py" phase="0" status="❌ future" contract="data/v3/tokens/{ticker}_{split}.npy → torch DataLoader (B,512,2) int64" cli="N/A (importable library, called by M-FINE-TUNE)" depends_on="M-TOKENIZE" guarantees="No lookahead (shift=1), No token shuffle across assets, L=512, stride=8" />
+
+    <module id="M-FINE-TUNE" name="Kronos Predictor Training" file="src/core/kronos/fine_tune.py" phase="1" status="❌ future" contract="DataLoader from M-DATASET + Kronos-small → checkpoints/kronos_moex_best.pt + history.json" cli="modal run src/core/kronos/fine_tune.py" depends_on="M-DATASET, M-KRONOS-MODEL, M-KRONOS-TOKENIZER" guarantees="Checkpoint resume (every 3 epochs + heartbeat 100 steps), Early stop, A100 40GB" />
+
+    <module id="M-PREDICT" name="Autoregressive Inference" file="src/core/kronos/predictor.py" phase="2" status="✅ ready" contract="data/v3/processed/{ticker}_{split}.npy + best.pt + tokenizer → data/v3/predictions/{ticker}_{split}.npy + manifest.json" cli="python src/core/kronos/predictor.py --checkpoint kronos_moex_best.pt --split test" depends_on="M-FINE-TUNE, M-KRONOS-TOKENIZER" guarantees="Deterministic seed per MC path, T4 GPU (< 0.5GB VRAM)" />
+
+    <module id="M-BACKTEST" name="Cross-Sectional Backtest" file="src/evaluation/backtest.py" phase="2" status="❌ future" contract="predictions/*.npy + raw/*.parquet → report.json + equity_curve.npy" cli="python -m src.evaluation.backtest --predictions data/v3/predictions --split test" depends_on="M-PREDICT, M-METRICS, M-STRATEGY-CORE" guarantees="Walk-forward validation, Session enforcement, No lookahead bias" />
+
+    <!-- Supporting -->
+    <module id="M-METRICS" name="Financial Strategy Metrics" file="src/evaluation/metrics.py" phase="all" status="✅ ready" contract="returns/equity/actual/pred arrays → metrics dict (Sharpe, MaxDD, WR, PSR, IC, etc.)" cli="N/A (library)" depends_on="" guarantees="14 metric functions, StrategyMetrics container class" />
+
+    <module id="M-CONFIG" name="Unified Configuration" file="config/global.yaml" phase="all" status="✅ ready" contract="All parameters (ticker, split, model, train, backtest, calibration)" cli="N/A (consumed by all modules)" depends_on="" guarantees="Single source of truth, no hardcoded values in code" />
+
+    <module id="M-DOCS" name="Documentation" file="docs/" phase="all" status="✅ ready" contract="architecture, module-contracts, CLI standard, commit format, failure catalog, audit, metrics, strategies, GRACE" cli="N/A" depends_on="" guarantees="Grep-first navigation via AGENTS.md" />
+
+    <module id="M-INFRA" name="Infrastructure" file="—" phase="all" status="❌ future" contract="Modal cloud config, Docker images, volume provisioning" cli="N/A" depends_on="" guarantees="" />
+
+    <module id="M-CI" name="CI/CD Pipeline" file=".github/workflows/" phase="all" status="❌ future" contract="Lint, typecheck, test, grace lint on push" cli="N/A" depends_on="" guarantees="" />
+  </modules>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- CALIBRATION PASSES                                                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <calibration>
+    <pass id="C1" name="pred_len_sweep" module="M-CALIBRATE" params="{pred_len: [1, 3, 6, 12, 24]}" />
+    <pass id="C2" name="temperature_sweep" module="M-CALIBRATE" params="{temperature: [0.2, 0.4, 0.6, 0.8, 1.0], top_p: [0.7, 0.8, 0.9, 0.95]}" />
+    <pass id="C3" name="consensus_sweep" module="M-CALIBRATE" params="{consensus_threshold: [0.0, 0.4, 0.6, 0.8, 1.0]}" />
+    <pass id="C4" name="tpsl_sweep" module="M-CALIBRATE" params="{tp_quantile: [0.7, 0.75, 0.8, 0.85], sl_quantile: [0.15, 0.2, 0.25]}" />
+  </calibration>
+
+  <timeline>
+    <estimate phase="0">2 hours (CPU + T4)</estimate>
+    <estimate phase="1">1 hour (A100 40GB)</estimate>
+    <estimate phase="2">2 hours (T4 + CPU)</estimate>
+    <estimate phase="3">Variable (iteration loop)</estimate>
+    <estimate total_minimum>5 hours single-session</estimate>
+    <estimate total_typical>1-2 calendar days (with debugging)</estimate>
+  </timeline>
+
+  <hardware_totals>
+    <resource gpu="A100" time="~1h" cost="~$2" purpose="Fine-tune" />
+    <resource gpu="T4" time="~4h" cost="~$1" purpose="Inference + Tokenization" />
+    <resource gpu="CPU" time="~1h" cost="$0" purpose="Preprocess + Backtest" />
+  </hardware_totals>
+
+</grace:development-plan>

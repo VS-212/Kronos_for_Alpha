@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grace:knowledge-graph xmlns:grace="https://grace.ai/schema/knowledge-graph">
+  <project>Kronos for Alpha</project>
+  <revision>1.0</revision>
+  <date>2026-05-28</date>
+  <description>Complete directed dependency graph of ALL modules in the Kronos Alpha project. Nodes are module IDs with name, file_path, and status. Edges represent compile-time, runtime, or logical dependencies.</description>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- NODES: 45 modules total                                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <nodes>
+    <!-- Pipeline (7) -->
+    <node id="M-FETCH"           name="MOEX Data Fetcher"               file="src/data/fetcher.py"                   category="pipeline"   status="✅ ready"     phase="data" />
+    <node id="M-PREPROCESS"      name="Session Filter + Split + Z-Score" file="src/data/preprocess.py"                 category="pipeline"   status="❌ future"    phase="0" />
+    <node id="M-TOKENIZE"        name="Kronos VQ-VAE Tokenizer"          file="src/core/kronos/tokenizer.py"          category="pipeline"   status="✅ ready"     phase="0" />
+    <node id="M-DATASET"         name="Predictor Sliding Window Dataset" file="src/data/dataset.py"                   category="pipeline"   status="❌ future"    phase="0" />
+    <node id="M-FINE-TUNE"       name="Kronos Predictor Fine-Tune"       file="src/core/kronos/fine_tune.py"          category="pipeline"   status="❌ future"    phase="1" />
+    <node id="M-PREDICT"         name="Autoregressive Inference"         file="src/core/kronos/predictor.py"          category="pipeline"   status="✅ ready"     phase="2" />
+    <node id="M-BACKTEST"        name="Cross-Sectional Backtest"         file="src/evaluation/backtest.py"            category="pipeline"   status="❌ future"    phase="2" />
+
+    <!-- Supporting (5) -->
+    <node id="M-METRICS"         name="Financial Metrics Library"        file="src/evaluation/metrics.py"             category="supporting" status="✅ ready"     phase="all" />
+    <node id="M-CONFIG"          name="Unified Configuration"            file="config/global.yaml"                    category="supporting" status="✅ ready"     phase="all" />
+    <node id="M-DOCS"            name="Documentation"                    file="docs/"                                 category="supporting" status="✅ ready"     phase="all" />
+    <node id="M-INFRA"           name="Infrastructure"                   file="—"                                     category="supporting" status="❌ future"    phase="all" />
+    <node id="M-CI"              name="CI/CD Pipeline"                   file=".github/workflows/"                    category="supporting" status="❌ future"    phase="all" />
+
+    <!-- Signal families (7) -->
+    <node id="M-SIGNAL-ATOMS"    name="Composable Signal Atoms"          file="src/signals/atoms.py"                  category="signal"     status="✅ ready"     phase="2+" />
+    <node id="M-SIGNAL-ICT"      name="ICT/SMC Signal Generation"        file="src/signals/ict.py"                    category="signal"     status="✅ ready"     phase="2+" />
+    <node id="M-SIGNAL-VOL"      name="Volatility Signals (ATR/ADR)"     file="src/signals/volatility.py"             category="signal"     status="✅ ready"     phase="2+" />
+    <node id="M-SIGNAL-VWAP"     name="VWAP Signals"                     file="src/signals/vwap.py"                   category="signal"     status="✅ ready"     phase="2+" />
+    <node id="M-SIGNAL-FRACTAL"  name="Williams Fractal Detection"       file="src/signals/fractal.py"                category="signal"     status="✅ ready"     phase="2+" />
+    <node id="M-SIGNAL-DIV"      name="RSI/OBV/MFI Divergence"           file="src/signals/divergence.py"             category="signal"     status="✅ ready"     phase="2+" />
+    <node id="M-SIGNAL-BARS"     name="Candlestick Pattern Classifier"   file="src/signals/bars.py"                   category="signal"     status="✅ ready"     phase="2+" />
+
+    <!-- Strategies (9) -->
+    <node id="M-STRATEGY-CORE"   name="Shared Strategy Engine"           file="src/strategies/core.py"                category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-VANILLA" name="Pure Kronos Consensus"           file="src/strategies/vanilla.py"             category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-S01"    name="BB + Consensus Filter"            file="src/strategies/s01_bb.py"              category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-S02"    name="BB Mean Reversion"                file="src/strategies/s02_bb_mr.py"           category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-S05"    name="BB Narrow (Low Vol Breakout)"     file="src/strategies/s05_bb_breakout.py"     category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-S20"    name="Order Block"                      file="src/strategies/s20_ob.py"              category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-S28"    name="Volume-Filtered Order Block"      file="src/strategies/s28_vol_ob.py"          category="strategy"   status="⚠ failed-may2026" phase="2+" />
+    <node id="M-STRATEGY-S34"    name="VWAP + Order Block"               file="src/strategies/s34_vwap_ob.py"         category="strategy"   status="⚠ failed-may2026" phase="2+" />
+    <node id="M-STRATEGY-S38"    name="Low-Vol Order Block"              file="src/strategies/s38_lowvol_ob.py"       category="strategy"   status="✅ ready"     phase="2+" />
+
+    <!-- Evaluation (5) -->
+    <node id="M-EVALUATE"        name="Per-Window Evaluation"            file="src/evaluation/evaluate.py"            category="evaluation" status="✅ ready"     phase="2+" />
+    <node id="M-CALIBRATE"       name="Hyperparameter Sweep Runner"      file="src/evaluation/calibrate.py"           category="evaluation" status="✅ ready"     phase="2+" />
+    <node id="M-OUTPUT"          name="Compact Result Serialization"     file="src/evaluation/output.py"              category="evaluation" status="✅ ready"     phase="2+" />
+    <node id="M-WALK-FORWARD"    name="Walk-Forward Validation Pipeline" file="src/evaluation/walk_forward.py"         category="evaluation" status="✅ ready"     phase="2+" />
+
+    <!-- Core model (5) -->
+    <node id="M-KRONOS-MODULES"  name="Kronos NN Building Blocks"        file="src/core/kronos/modules.py"            category="core-model" status="✅ ready"     phase="all" />
+    <node id="M-KRONOS-TOKENIZER" name="KronosTokenizer (VQ-VAE)"        file="src/core/kronos/tokenizer.py"          category="core-model" status="✅ ready"     phase="0,1,2" />
+    <node id="M-KRONOS-MODEL"    name="Kronos Transformer Model"         file="src/core/kronos/model.py"              category="core-model" status="✅ ready"     phase="1,2" />
+    <node id="M-KRONOS-PREDICTOR" name="Kronos Inference Runner"         file="src/core/kronos/predictor.py"          category="core-model" status="✅ ready"     phase="2" />
+    <node id="M-KRONOS-REGISTRY" name="Kronos Model Registry"            file="src/core/kronos/—"                     category="core-model" status="❌ future"    phase="all" />
+
+    <!-- Data layer (3) -->
+    <node id="M-DATA-BASE"       name="Abstract DataSource Interface"    file="src/data/base.py"                      category="data"       status="✅ ready"     phase="all" />
+    <node id="M-DATA-CACHE"      name="Parquet-Backed Data Cache"        file="src/data/cache.py"                     category="data"       status="✅ ready"     phase="all" />
+    <node id="M-DATA-MOEX"       name="MOEX ISS DataSource"              file="src/data/moex.py"                      category="data"       status="✅ ready"     phase="data" />
+  </nodes>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- EDGES: source → target, relation_type                              -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <edges>
+    <!-- ── Pipeline chain (sequential dependency) ── -->
+    <edge source="M-FETCH"      target="M-DATA-MOEX"       relation="depends_on"    />
+    <edge source="M-FETCH"      target="M-DATA-CACHE"      relation="uses"          />
+    <edge source="M-FETCH"      target="M-DATA-BASE"       relation="depends_on"    />
+    <edge source="M-FETCH"      target="M-CONFIG"          relation="reads_config"  />
+
+    <edge source="M-PREPROCESS" target="M-FETCH"           relation="consumes_output" />
+    <edge source="M-PREPROCESS" target="M-CONFIG"          relation="reads_config"  />
+
+    <edge source="M-TOKENIZE"   target="M-PREPROCESS"      relation="consumes_output" />
+    <edge source="M-TOKENIZE"   target="M-KRONOS-TOKENIZER" relation="depends_on"   />
+    <edge source="M-TOKENIZE"   target="M-CONFIG"          relation="reads_config"  />
+
+    <edge source="M-DATASET"    target="M-TOKENIZE"        relation="consumes_output" />
+    <edge source="M-DATASET"    target="M-CONFIG"          relation="reads_config"  />
+
+    <edge source="M-FINE-TUNE"  target="M-DATASET"         relation="consumes_output" />
+    <edge source="M-FINE-TUNE"  target="M-KRONOS-MODEL"    relation="depends_on"    />
+    <edge source="M-FINE-TUNE"  target="M-KRONOS-MODULES"  relation="depends_on"    />
+    <edge source="M-FINE-TUNE"  target="M-KRONOS-TOKENIZER" relation="uses"         />
+    <edge source="M-FINE-TUNE"  target="M-CONFIG"          relation="reads_config"  />
+
+    <edge source="M-PREDICT"    target="M-FINE-TUNE"       relation="consumes_output" />
+    <edge source="M-PREDICT"    target="M-KRONOS-TOKENIZER" relation="depends_on"   />
+    <edge source="M-PREDICT"    target="M-KRONOS-MODEL"    relation="depends_on"    />
+    <edge source="M-PREDICT"    target="M-KRONOS-MODULES"  relation="depends_on"    />
+    <edge source="M-PREDICT"    target="M-CONFIG"          relation="reads_config"  />
+
+    <edge source="M-BACKTEST"   target="M-PREDICT"         relation="consumes_output" />
+    <edge source="M-BACKTEST"   target="M-METRICS"         relation="uses"          />
+    <edge source="M-BACKTEST"   target="M-STRATEGY-CORE"   relation="uses"          />
+    <edge source="M-BACKTEST"   target="M-CONFIG"          relation="reads_config"  />
+    <edge source="M-BACKTEST"   target="M-WALK-FORWARD"    relation="uses"          />
+
+    <!-- ── Core model internals ── -->
+    <edge source="M-KRONOS-MODEL"    target="M-KRONOS-MODULES"  relation="depends_on" />
+    <edge source="M-KRONOS-TOKENIZER" target="M-KRONOS-MODULES" relation="depends_on" />
+    <edge source="M-KRONOS-PREDICTOR" target="M-KRONOS-MODEL"   relation="depends_on" />
+    <edge source="M-KRONOS-PREDICTOR" target="M-KRONOS-TOKENIZER" relation="depends_on" />
+    <edge source="M-KRONOS-REGISTRY"  target="M-KRONOS-MODEL"   relation="manages"    />
+
+    <!-- ── Data layer internals ── -->
+    <edge source="M-DATA-MOEX"   target="M-DATA-BASE"       relation="implements"    />
+    <edge source="M-DATA-MOEX"   target="M-DATA-CACHE"      relation="uses"          />
+
+    <!-- ── Strategies → Core engine ── -->
+    <edge source="M-STRATEGY-VANILLA" target="M-STRATEGY-CORE"   relation="depends_on" />
+    <edge source="M-STRATEGY-S01"     target="M-STRATEGY-CORE"   relation="depends_on" />
+    <edge source="M-STRATEGY-S02"     target="M-STRATEGY-CORE"   relation="depends_on" />
+    <edge source="M-STRATEGY-S05"     target="M-STRATEGY-CORE"   relation="depends_on" />
+    <edge source="M-STRATEGY-S20"     target="M-STRATEGY-CORE"   relation="depends_on" />
+    <edge source="M-STRATEGY-S28"     target="M-STRATEGY-CORE"   relation="depends_on" />
+    <edge source="M-STRATEGY-S34"     target="M-STRATEGY-CORE"   relation="depends_on" />
+    <edge source="M-STRATEGY-S38"     target="M-STRATEGY-CORE"   relation="depends_on" />
+
+    <!-- ── Strategies → Signals (specific usage) ── -->
+    <edge source="M-STRATEGY-CORE"    target="M-SIGNAL-ATOMS"     relation="uses" />
+    <edge source="M-STRATEGY-CORE"    target="M-SIGNAL-VOL"       relation="uses" />
+    <edge source="M-STRATEGY-CORE"    target="M-OUTPUT"           relation="uses" />
+
+    <edge source="M-STRATEGY-VANILLA" target="M-SIGNAL-ATOMS"     relation="uses" />
+    <edge source="M-STRATEGY-VANILLA" target="M-OUTPUT"           relation="uses" />
+
+    <edge source="M-STRATEGY-S01"     target="M-SIGNAL-ATOMS"     relation="uses" />
+    <edge source="M-STRATEGY-S01"     target="M-OUTPUT"           relation="uses" />
+
+    <edge source="M-STRATEGY-S20"     target="M-SIGNAL-ICT"       relation="uses" />
+    <edge source="M-STRATEGY-S20"     target="M-SIGNAL-FRACTAL"   relation="uses" />
+    <edge source="M-STRATEGY-S20"     target="M-SIGNAL-ATOMS"     relation="uses" />
+
+    <edge source="M-STRATEGY-S28"     target="M-SIGNAL-ICT"       relation="uses" />
+    <edge source="M-STRATEGY-S28"     target="M-SIGNAL-VOL"       relation="uses" />
+    <edge source="M-STRATEGY-S28"     target="M-SIGNAL-ATOMS"     relation="uses" />
+
+    <edge source="M-STRATEGY-S34"     target="M-SIGNAL-VWAP"      relation="uses" />
+    <edge source="M-STRATEGY-S34"     target="M-SIGNAL-ICT"       relation="uses" />
+    <edge source="M-STRATEGY-S34"     target="M-SIGNAL-FRACTAL"   relation="uses" />
+    <edge source="M-STRATEGY-S34"     target="M-SIGNAL-ATOMS"     relation="uses" />
+
+    <edge source="M-STRATEGY-S38"     target="M-SIGNAL-ICT"       relation="uses" />
+    <edge source="M-STRATEGY-S38"     target="M-SIGNAL-VOL"       relation="uses" />
+    <edge source="M-STRATEGY-S38"     target="M-SIGNAL-ATOMS"     relation="uses" />
+
+    <!-- ── Signal families internals (no cross-deps, pure numpy) ── -->
+    <edge source="M-SIGNAL-FRACTAL"   target="M-SIGNAL-DIV"       relation="used_by"  />
+    <edge source="M-SIGNAL-ICT"       target="M-SIGNAL-FRACTAL"   relation="uses"     />
+    <edge source="M-SIGNAL-VWAP"      target="M-SIGNAL-FRACTAL"   relation="uses"     />
+    <edge source="M-SIGNAL-BARS"      target="M-SIGNAL-VOL"       relation="cooperates_with" />
+
+    <!-- ── Evaluation internals ── -->
+    <edge source="M-EVALUATE"         target="M-METRICS"          relation="uses"     />
+    <edge source="M-WALK-FORWARD"     target="M-KRONOS-MODEL"     relation="depends_on" />
+    <edge source="M-WALK-FORWARD"     target="M-EVALUATE"         relation="uses"     />
+    <edge source="M-WALK-FORWARD"     target="M-OUTPUT"           relation="uses"     />
+    <edge source="M-WALK-FORWARD"     target="M-DATA-MOEX"        relation="uses"     />
+    <edge source="M-WALK-FORWARD"     target="M-DATA-CACHE"       relation="uses"     />
+    <edge source="M-CALIBRATE"        target="M-WALK-FORWARD"     relation="consumes_output" />
+    <edge source="M-CALIBRATE"        target="M-METRICS"          relation="uses"     />
+    <edge source="M-CALIBRATE"        target="M-DATA-MOEX"        relation="uses"     />
+
+    <!-- ── Generic: all modules read config ── -->
+    <edge source="M-KRONOS-TOKENIZER" target="M-CONFIG"          relation="reads_config" />
+    <edge source="M-STRATEGY-CORE"    target="M-CONFIG"          relation="reads_config" />
+    <edge source="M-METRICS"          target="M-CONFIG"          relation="reads_config" />
+    <edge source="M-EVALUATE"         target="M-CONFIG"          relation="reads_config" />
+    <edge source="M-CALIBRATE"        target="M-CONFIG"          relation="reads_config" />
+    <edge source="M-WALK-FORWARD"     target="M-CONFIG"          relation="reads_config" />
+  </edges>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PHASE-BASED DEPENDENCY ORDER                                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <topological_order>
+    <!-- Data ingestion (no model deps) -->
+    <level id="L0" name="data_layer">
+      <node id="M-DATA-BASE" />
+      <node id="M-DATA-CACHE" />
+      <node id="M-DATA-MOEX" />
+      <node id="M-CONFIG" />
+    </level>
+
+    <!-- Core model building blocks -->
+    <level id="L1" name="model_building_blocks">
+      <node id="M-KRONOS-MODULES" />
+    </level>
+
+    <!-- Tokenizer + Model (depends on modules) -->
+    <level id="L2" name="model_core">
+      <node id="M-KRONOS-TOKENIZER" />
+      <node id="M-KRONOS-MODEL" />
+    </level>
+
+    <!-- Pipeline Phase 0: Data prep + Tokenize -->
+    <level id="L3" name="pipeline_phase_0">
+      <node id="M-FETCH" />
+      <node id="M-PREPROCESS" />
+      <node id="M-TOKENIZE" />
+      <node id="M-DATASET" />
+    </level>
+
+    <!-- Pipeline Phase 1: Fine-tune -->
+    <level id="L4" name="pipeline_phase_1">
+      <node id="M-FINE-TUNE" />
+    </level>
+
+    <!-- Pipeline Phase 2: Inference + Backtest -->
+    <level id="L5" name="pipeline_phase_2">
+      <node id="M-PREDICT" />
+      <node id="M-KRONOS-PREDICTOR" />
+    </level>
+
+    <!-- Signals (no model deps, just numpy) -->
+    <level id="L6" name="signal_layer">
+      <node id="M-SIGNAL-ATOMS" />
+      <node id="M-SIGNAL-ICT" />
+      <node id="M-SIGNAL-VOL" />
+      <node id="M-SIGNAL-VWAP" />
+      <node id="M-SIGNAL-FRACTAL" />
+      <node id="M-SIGNAL-DIV" />
+      <node id="M-SIGNAL-BARS" />
+    </level>
+
+    <!-- Strategies (depends on signals + core) -->
+    <level id="L7" name="strategy_layer">
+      <node id="M-STRATEGY-CORE" />
+      <node id="M-STRATEGY-VANILLA" />
+      <node id="M-STRATEGY-S01" />
+      <node id="M-STRATEGY-S02" />
+      <node id="M-STRATEGY-S05" />
+      <node id="M-STRATEGY-S20" />
+      <node id="M-STRATEGY-S28" />
+      <node id="M-STRATEGY-S34" />
+      <node id="M-STRATEGY-S38" />
+    </level>
+
+    <!-- Evaluation + Backtest (depends on strategies + model) -->
+    <level id="L8" name="evaluation_layer">
+      <node id="M-METRICS" />
+      <node id="M-EVALUATE" />
+      <node id="M-OUTPUT" />
+      <node id="M-WALK-FORWARD" />
+      <node id="M-CALIBRATE" />
+      <node id="M-BACKTEST" />
+    </level>
+
+    <!-- Meta / optional -->
+    <level id="L9" name="infra_docs_ci">
+      <node id="M-DOCS" />
+      <node id="M-INFRA" />
+      <node id="M-CI" />
+      <node id="M-KRONOS-REGISTRY" />
+    </level>
+  </topological_order>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- EXTERNAL DEPENDENCIES (HuggingFace, Modal, MOEX ISS)               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <external_dependencies>
+    <external id="EXT-HF-TOKENIZER" name="NeoQuasar/Kronos-Tokenizer-2k" type="huggingface_model" consumed_by="M-TOKENIZE, M-PREDICT, M-FINE-TUNE" auth="HF_TOKEN (gated)" />
+    <external id="EXT-HF-SMALL" name="NeoQuasar/Kronos-small" type="huggingface_model" consumed_by="M-FINE-TUNE, M-PREDICT" auth="HF_TOKEN (gated)" />
+    <external id="EXT-HF-MINI" name="NeoQuasar/Kronos-mini" type="huggingface_model" consumed_by="M-STRATEGY-CORE" auth="HF_TOKEN (gated)" />
+    <external id="EXT-MOEX-ISS" name="MOEX ISS HTTP API" type="rest_api" consumed_by="M-FETCH, M-DATA-MOEX" auth="none (public)" />
+    <external id="EXT-MODAL" name="Modal GPU Cloud" type="cloud_infra" consumed_by="M-FINE-TUNE, M-PREDICT" auth="Modal token" />
+    <external id="EXT-TORCH" name="PyTorch 2.0+" type="python_library" consumed_by="M-KRONOS-MODULES, M-KRONOS-MODEL, M-KRONOS-TOKENIZER, M-FINE-TUNE, M-PREDICT" />
+    <external id="EXT-EINOPS" name="einops" type="python_library" consumed_by="M-KRONOS-MODULES" />
+    <external id="EXT-SCIPY" name="scipy.stats" type="python_library" consumed_by="M-METRICS, M-EVALUATE" />
+    <external id="EXT-APIMOEX" name="apimoex" type="python_library" consumed_by="M-DATA-MOEX" />
+  </external_dependencies>
+
+</grace:knowledge-graph>
