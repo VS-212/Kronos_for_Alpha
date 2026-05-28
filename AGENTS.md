@@ -1,5 +1,59 @@
 # Kronos for Alpha — Agent Entry Point
 
+## PURPOSE
+Maximize price prediction metrics for MOEX financial assets via:
+- Kronos transformer fine-tune (CE loss on discrete tokens)
+- Multi-signal alpha generation (8 families — see `src/signals/__init__.py` for catalog)
+- Strategy backtesting with walk-forward validation
+- Cross-sectional z-score ranking for alpha extraction
+See: `docs/requirements.xml`
+
+## SCOPE
+IN:
+  M-FETCH      MOEX ISS data ingestion
+  M-PREPROCESS Session filter, per-window z-score, train/val/test split
+  M-TOKENIZE   Kronos VQ-VAE tokenizer inference
+  M-DATASET    Sliding window dataset (L=512, stride=8)
+  M-FINE-TUNE  Kronos predictor training (CE loss, A100)
+  M-PREDICT    Autoregressive inference → OHLCV predictions
+  M-BACKTEST   Cross-sectional backtest (top-K long/short)
+  M-METRICS    Strategy evaluation
+  M-CONFIG     Single source of truth (config/global.yaml)
+OUT:
+  Real-time execution, portfolio optimization, order management
+  (These require infrastructure beyond prediction + backtesting)
+See: `docs/requirements.xml`, `docs/module-contracts.md`
+
+## KEY METRICS
+Strategy evaluation (from `src/evaluation/metrics.py`):
+  WinRate, Sharpe, MaxDrawdown, ProfitFactor, Calmar, Sortino,
+  IcRank, AvgReturn, DirectionAccuracy, Bias, MAE, PSR, DSR,
+  N-trades, trade_pct, PredictionVolatility
+
+Quality gates (thresholds in `config/global.yaml §quality_gates`):
+  P0 tokenizer, P1 fine-tune, P2 backtest
+See: `config/global.yaml`, `docs/verification-plan.xml`
+
+## DEVELOPMENT PRINCIPLES
+1. **Contract-first**: define M-XXX I/O in `module-contracts.md` before implementing
+2. **One layer — one direction**: imports follow dependency graph (enforced by `.importlinter`)
+3. **Reproducible**: every commit has `Verified:` with exact command + result
+4. **Template-isolated**: experiments in `templates/`, production in `src/`
+5. **Single config source**: all params in `config/global.yaml`, not hardcoded
+6. **Grace-gated**: changes pass `grace lint --profile standard`
+7. **No invented scope**: if a feature is not in `module-contracts.md`, it is OUT
+
+## WORKFLOW
+```
+research → plan → review → implement → verify
+  ↑         ↑        ↑         ↑            ↑
+  │         │        │         │            └── ruff + grace lint + pytest
+  │         │        │         └── sub-agents per M-XXX, commit (Verified:)
+  │         │        └── ruff + import-linter + grace-reviewer
+  │         └── grace-plan + knowledge-graph.xml cross-check
+  └── grep M-XXX + sub-agent explore
+```
+
 ## Grep-First Navigation
 
 ```
@@ -12,7 +66,7 @@ grep "CLI"           → docs/conventions/cli.md           (how to write CLI mod
 grep "CONFIG"        → config/global.yaml                (all parameters)
 grep "M-METRICS"     → src/evaluation/metrics.py         (Sharpe, MaxDD, WR, PSR)
 grep "M-BACKTEST"    → docs/module-contracts.md          (M-BACKTEST spec)
-grep "GRACE"         → docs/grace/                       (GRACE XML artifacts)
+grep "GRACE"         → docs/                                (GRACE XML artifacts)
 ```
 
 ## M-XXX Module ID Namespace
@@ -43,7 +97,7 @@ Kronos_for_Alpha/
 ├── src/
 │   ├── core/kronos/          # Tokenizer, model, modules, predictor, fine_tune
 │   ├── data/                 # Fetcher, preprocess, dataset, base abstractions
-│   ├── signals/              # 7 signal families (atoms, ict, volatility, vwap, fractal, divergence, bars)
+│   ├── signals/              # 8 signal families (see signals/__init__.py for catalog)
 │   ├── strategies/           # Engine + 8 strategies
 │   └── evaluation/           # Metrics, backtest, walk-forward, calibration
 │
@@ -53,7 +107,7 @@ Kronos_for_Alpha/
 │   └── scripts/
 │
 ├── docs/
-│   ├── grace/                # GRACE XML artifacts (6 files)
+│   ├── development-plan.xml, knowledge-graph.xml, etc. # GRACE XML artifacts (6 files)
 │   ├── architecture.md       # Master architecture document
 │   ├── module-contracts.md   # M-XXX contracts for all pipeline modules
 │   ├── conventions/
@@ -108,7 +162,7 @@ M-BACKTEST     src/evaluation/backtest.py   Cross-sectional (top-3 long, bot-2 s
 | `docs/module-contracts.md` | Learn module contract (M-XXX → input/output/guarantees) |
 | `docs/conventions/commit.md` | Making a commit — format spec |
 | `docs/operations/failures.md` | Modal job crashed — exact-match symptom from log |
-| `docs/grace/` | GRACE XML artifacts (requirements, technology, development-plan, verification-plan, knowledge-graph, operational-packets) |
+| `docs/` | GRACE XML artifacts (requirements, technology, development-plan, verification-plan, knowledge-graph, operational-packets) |
 | `config/global.yaml` | All parameters (ticker, split, model, train, backtest) |
 
 ## Commit Format Specification
@@ -143,7 +197,7 @@ See `docs/conventions/commit.md` for full field semantics, security rules, and e
 - **Tokenizer frozen**: Phase 0 quality gate validates KronosTokenizer on MOEX data first
 - **Walk-forward split**: train 2023→2025, val 2025-02→2025-09, test 2025-09→2026-05
 - **CLI, not MCP**: batch operations, fire-and-forget. CLI via bash tool
-- **GRACE integration**: XML artifacts in `docs/grace/`, semantic markers, grace lint
+- **GRACE integration**: XML artifacts in `docs/`, semantic markers, grace lint
 
 ## Project Goal
 
