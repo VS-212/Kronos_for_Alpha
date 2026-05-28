@@ -61,9 +61,9 @@ update ALL of these or `grace lint` will flag the mismatch:
 ```
 research → plan → review → implement → verify
   ↑         ↑        ↑         ↑            ↑
-  │         │        │         │            └── ruff + grace lint + pytest
+  │         │        │         │            └── ruff + grace lint + grace-checklist
   │         │        │         └── sub-agents per M-XXX, commit (Verified:)
-  │         │        └── ruff + import-linter + grace-reviewer
+  │         │        └── ruff + import-linter + grace-reviewer + grace-checklist
   │         └── grace-plan + knowledge-graph.xml cross-check
   └── grep M-XXX + sub-agent explore
 ```
