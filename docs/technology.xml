@@ -52,6 +52,22 @@
     <constraint>CLI modules must support: Resume, Retry, Idempotent, Validate</constraint>
   </constraints>
 
+  <PreferredAgentStack>
+    <runtime>Python 3.12, PyTorch 2.0+, Modal GPU cloud</runtime>
+    <test>pytest >= 8.0, pytest-cov</test>
+    <lint>Ruff (lint + format), MyPy (type check), import-linter (layer contracts)</lint>
+    <observability>Modal logs, wandb (optional), print-based progress for CLI modules</observability>
+    <formatter>Ruff (double quotes, 100 char line length)</formatter>
+  </PreferredAgentStack>
+
+  <AutonomyPolicy>
+    <retry-budget>3 attempts per module failure, then escalate to controller</retry-budget>
+    <replan-triggers>Grace lint failure, contract mismatch, import-linter violation, quality gate failure</replan-triggers>
+    <stop-conditions>3 consecutive autonomous cycles without progress, Sharpe below -5, NaN in predictions, data source unreachable after 3 retries</stop-conditions>
+    <verification-gates>ruff check, grace lint --profile autonomous, pytest, import-linter</verification-gates>
+    <phase-gates>P0 tokenizer codebook_util >= 200, P1 validation CE loss convergence, P2 Sharpe >= 0.5</phase-gates>
+  </AutonomyPolicy>
+
   <revision>1.0</revision>
   <date>2026-05-28</date>
 </grace:technology>

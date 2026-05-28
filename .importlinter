@@ -1,0 +1,60 @@
+[packages]
+src = ["src"]
+
+[layers]
+# Layer 0: Foundation — no dependencies on other project layers
+src.core = ["src.core"]
+
+# Layer 1: Data — depends only on foundation
+src.data = ["src.data"]
+
+# Layer 2: Signals — depends on data, NOT on strategies or evaluation
+src.signals = ["src.signals"]
+
+# Layer 3: Strategies — depends on signals, data, core
+src.strategies = ["src.strategies"]
+
+# Layer 4: Evaluation — depends on strategies, signals, data, core
+src.evaluation = ["src.evaluation"]
+
+[contracts]
+# Data layer: must not import from signals, strategies, or evaluation
+src.data = """
+  forbidden:
+    - src.signals
+    - src.strategies
+    - src.evaluation
+"""
+
+# Core layer: must not import from signals, strategies, evaluation
+src.core = """
+  forbidden:
+    - src.data
+    - src.signals
+    - src.strategies
+    - src.evaluation
+  allow:
+    - src.core.kronos  # intra-core imports OK
+"""
+
+# Signals layer: must not import from strategies or evaluation
+src.signals = """
+  forbidden:
+    - src.strategies
+    - src.evaluation
+"""
+
+# Strategies layer: must not import from evaluation
+src.strategies = """
+  forbidden:
+    - src.evaluation
+"""
+
+# Evaluation layer: can import from all layers (top of dependency chain)
+src.evaluation = """
+  allow:
+    - src.core
+    - src.data
+    - src.signals
+    - src.strategies
+"""

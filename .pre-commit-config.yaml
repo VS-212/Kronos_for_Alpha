@@ -1,0 +1,44 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=5000]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.14
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: MyPy type check
+        entry: mypy
+        args: [--config-file=pyproject.toml, src/]
+        language: system
+        pass_filenames: false
+        types: [python]
+        require_serial: true
+
+      - id: import-linter
+        name: Import layer contract check
+        entry: lint-imports
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      - id: grace-lint
+        name: GRACE autonomous lint
+        entry: bash -c 'export PATH="/home/aaa/.bun/bin:$PATH" && grace lint --profile autonomous --path .'
+        language: system
+        pass_filenames: false
+        always_run: true

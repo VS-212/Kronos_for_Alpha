@@ -10,13 +10,13 @@
   <phase id="0" name="tokenizer_quality" status="preflight">
     <description>Validate KronosTokenizer-2k on MOEX 21-asset data. Must pass all quality gates before proceeding to fine-tune. Failure triggers contingency: retrain tokenizer on MOEX (8+8 bit) or fall back to raw OHLCV projection.</description>
 
-    <step id="P0.1" order="1" module="M-TOKENIZE" action="Download KronosTokenizer-2k from HuggingFace" file="src/core/kronos/tokenizer.py" time="0.1h" gate="Model loaded" depends_on="" />
-    <step id="P0.2" order="2" module="M-TOKENIZE" action="Tokenize MOEX val set (160k bars)" file="src/core/kronos/tokenizer.py" time="0.5h" gate="No crash" depends_on="P0.1" />
-    <step id="P0.3" order="3" module="M-TOKENIZE" action="Check codebook utilization: count unique s1+s2 IDs across all bars" file="src/core/kronos/tokenizer.py" time="0.1h" gate=">= 200 unique codes (20% of 1024)" depends_on="P0.2" />
-    <step id="P0.4" order="4" module="M-TOKENIZE" action="Check token entropy: H = -Sum p(i)*log2(p(i))" file="src/core/kronos/tokenizer.py" time="0.1h" gate=">= 5.0 bits (out of 10 max)" depends_on="P0.2" />
-    <step id="P0.5" order="5" module="M-TOKENIZE" action="Check reconstruction MSE: tokenizer.decode(encode(x)) - x" file="src/core/kronos/tokenizer.py" time="0.3h" gate="<= 0.01" depends_on="P0.2" />
-    <step id="P0.6" order="6" module="M-TOKENIZE" action="Per-asset utilization: verify no asset has < 50 unique codes" file="src/core/kronos/tokenizer.py" time="0.2h" gate="All 21 assets >= 50 codes" depends_on="P0.3" />
-    <step id="P0.7" order="7" module="M-TOKENIZE" action="Cross-correlation matrix: 21-asset return correlations" file="src/core/kronos/tokenizer.py" time="0.1h" gate="RMS < 0.5 (assets are differentiable)" depends_on="P0.2" />
+    <step-1 id="P0.1" module="M-TOKENIZE" action="Download KronosTokenizer-2k from HuggingFace" file="src/core/kronos/tokenizer.py" time="0.1h" gate="Model loaded" depends_on="" />
+    <step-2 id="P0.2" module="M-TOKENIZE" action="Tokenize MOEX val set (160k bars)" file="src/core/kronos/tokenizer.py" time="0.5h" gate="No crash" depends_on="P0.1" />
+    <step-3 id="P0.3" module="M-TOKENIZE" action="Check codebook utilization: count unique s1+s2 IDs across all bars" file="src/core/kronos/tokenizer.py" time="0.1h" gate=">= 200 unique codes (20% of 1024)" depends_on="P0.2" />
+    <step-4 id="P0.4" module="M-TOKENIZE" action="Check token entropy: H = -Sum p(i)*log2(p(i))" file="src/core/kronos/tokenizer.py" time="0.1h" gate=">= 5.0 bits (out of 10 max)" depends_on="P0.2" />
+    <step-5 id="P0.5" module="M-TOKENIZE" action="Check reconstruction MSE: tokenizer.decode(encode(x)) - x" file="src/core/kronos/tokenizer.py" time="0.3h" gate="<= 0.01" depends_on="P0.2" />
+    <step-6 id="P0.6" module="M-TOKENIZE" action="Per-asset utilization: verify no asset has < 50 unique codes" file="src/core/kronos/tokenizer.py" time="0.2h" gate="All 21 assets >= 50 codes" depends_on="P0.3" />
+    <step-7 id="P0.7" module="M-TOKENIZE" action="Cross-correlation matrix: 21-asset return correlations" file="src/core/kronos/tokenizer.py" time="0.1h" gate="RMS < 0.5 (assets are differentiable)" depends_on="P0.2" />
 
     <contingency trigger="P0.3-P0.6 FAIL">
       <option id="A" name="retrain_tokenizer">Retrain tokenizer on MOEX data (8+8 bit, ~10h A100)</option>
@@ -31,12 +31,12 @@
   <phase id="1" name="finetune" status="blocked_by_phase_0">
     <description>Fine-tune Kronos-small predictor on MOEX tokens (tokenizer frozen). CE loss on s1+s2 tokens. ~70k training windows across 21 assets.</description>
 
-    <step id="P1.1" order="8" module="M-FINE-TUNE" action="Download Kronos-small from HuggingFace" file="src/core/kronos/fine_tune.py" time="0.1h" gate="Model loaded" depends_on="P0.3,P0.4,P0.5,P0.6" />
-    <step id="P1.2" order="9" module="M-DATASET" action="Create PredictorDataset: L=512, shift=1, stride=8, batch=12" file="src/data/dataset.py" time="0.1h" gate="Shapes verified" depends_on="P0.6" />
-    <step id="P1.3" order="10" module="M-FINE-TUNE" action="Train session 1 (epoch 1-15)" file="src/core/kronos/fine_tune.py" time="~0.5h" gate="Val CE decreases" depends_on="P1.1,P1.2" />
-    <step id="P1.4" order="11" module="M-FINE-TUNE" action="Save checkpoint kronos_moex_epoch_15.pt to Modal volume" file="src/core/kronos/fine_tune.py" time="0.05h" gate="Saved" depends_on="P1.3" />
-    <step id="P1.5" order="12" module="M-FINE-TUNE" action="Resume: load best, continue to epoch 16-30" file="src/core/kronos/fine_tune.py" time="~0.5h" gate="Val CE converges" depends_on="P1.4" />
-    <step id="P1.6" order="13" module="M-FINE-TUNE" action="Save kronos_moex_best.pt (val CE minimum)" file="src/core/kronos/fine_tune.py" time="0.05h" gate="Saved" depends_on="P1.5" />
+    <step-8 id="P1.1" module="M-FINE-TUNE" action="Download Kronos-small from HuggingFace" file="src/core/kronos/fine_tune.py" time="0.1h" gate="Model loaded" depends_on="P0.3,P0.4,P0.5,P0.6" />
+    <step-9 id="P1.2" module="M-DATASET" action="Create PredictorDataset: L=512, shift=1, stride=8, batch=12" file="src/data/dataset.py" time="0.1h" gate="Shapes verified" depends_on="P0.6" />
+    <step-10 id="P1.3" module="M-FINE-TUNE" action="Train session 1 (epoch 1-15)" file="src/core/kronos/fine_tune.py" time="~0.5h" gate="Val CE decreases" depends_on="P1.1,P1.2" />
+    <step-11 id="P1.4" module="M-FINE-TUNE" action="Save checkpoint kronos_moex_epoch_15.pt to Modal volume" file="src/core/kronos/fine_tune.py" time="0.05h" gate="Saved" depends_on="P1.3" />
+    <step-12 id="P1.5" module="M-FINE-TUNE" action="Resume: load best, continue to epoch 16-30" file="src/core/kronos/fine_tune.py" time="~0.5h" gate="Val CE converges" depends_on="P1.4" />
+    <step-13 id="P1.6" module="M-FINE-TUNE" action="Save kronos_moex_best.pt (val CE minimum)" file="src/core/kronos/fine_tune.py" time="0.05h" gate="Saved" depends_on="P1.5" />
 
     <training_config>
       <param name="model">NeoQuasar/Kronos-small</param>
@@ -69,11 +69,11 @@
   <phase id="2" name="inference_backtest" status="blocked_by_phase_1">
     <description>Generate predictions via autoregressive MC sampling, then run cross-sectional backtest with walk-forward validation.</description>
 
-    <step id="P2.1" order="14" module="M-PREDICT" action="Load kronos_moex_best.pt + KronosTokenizer-2k" file="src/core/kronos/predictor.py" time="0.1h" gate="Loaded" depends_on="P1.6" />
-    <step id="P2.2" order="15" module="M-PREDICT" action="Autoregressive inference on test (21 x ~8.7k bars)" file="src/core/kronos/predictor.py" time="1.5h" gate="Per-asset OHLCV saved" depends_on="P2.1" />
-    <step id="P2.3" order="16" module="M-BACKTEST" action="Cross-sectional backtest: top-3 long, bot-2 short, session enforcement" file="src/evaluation/backtest.py" time="0.5h" gate="" depends_on="P2.2" />
-    <step id="P2.4" order="17" module="M-METRICS" action="Compute metrics: Sharpe, MaxDD, WR, PSR, Calmar, IC" file="src/evaluation/metrics.py" time="0.1h" gate="" depends_on="P2.3" />
-    <step id="P2.5" order="18" module="M-BACKTEST" action="Walk-forward validation: re-run on val split, compare val vs test" file="src/evaluation/backtest.py" time="0.5h" gate="Val ~= Test (no overfit)" depends_on="P2.4" />
+    <step-14 id="P2.1" module="M-PREDICT" action="Load kronos_moex_best.pt + KronosTokenizer-2k" file="src/core/kronos/predictor.py" time="0.1h" gate="Loaded" depends_on="P1.6" />
+    <step-15 id="P2.2" module="M-PREDICT" action="Autoregressive inference on test (21 x ~8.7k bars)" file="src/core/kronos/predictor.py" time="1.5h" gate="Per-asset OHLCV saved" depends_on="P2.1" />
+    <step-16 id="P2.3" module="M-BACKTEST" action="Cross-sectional backtest: top-3 long, bot-2 short, session enforcement" file="src/evaluation/backtest.py" time="0.5h" gate="" depends_on="P2.2" />
+    <step-17 id="P2.4" module="M-METRICS" action="Compute metrics: Sharpe, MaxDD, WR, PSR, Calmar, IC" file="src/evaluation/metrics.py" time="0.1h" gate="" depends_on="P2.3" />
+    <step-18 id="P2.5" module="M-BACKTEST" action="Walk-forward validation: re-run on val split, compare val vs test" file="src/evaluation/backtest.py" time="0.5h" gate="Val ~= Test (no overfit)" depends_on="P2.4" />
 
     <inference_config>
       <param name="lookback">506 bars (~10 trading days)</param>
@@ -179,4 +179,46 @@
     <resource gpu="CPU" time="~1h" cost="$0" purpose="Preprocess + Backtest" />
   </hardware_totals>
 
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- MODULE REGISTRY (grace-indexed)                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <module-registry>
+    <M-FETCH></M-FETCH>
+    <M-PREPROCESS></M-PREPROCESS>
+    <M-TOKENIZE></M-TOKENIZE>
+    <M-DATASET></M-DATASET>
+    <M-FINE-TUNE></M-FINE-TUNE>
+    <M-PREDICT></M-PREDICT>
+    <M-BACKTEST></M-BACKTEST>
+    <M-METRICS></M-METRICS>
+    <M-CONFIG></M-CONFIG>
+    <M-DOCS></M-DOCS>
+    <M-INFRA></M-INFRA>
+    <M-CI></M-CI>
+    <M-KRONOS-TOKENIZER></M-KRONOS-TOKENIZER>
+    <M-KRONOS-MODEL></M-KRONOS-MODEL>
+    <M-KRONOS-PREDICTOR></M-KRONOS-PREDICTOR>
+    <M-KRONOS-REGISTRY></M-KRONOS-REGISTRY>
+    <M-SIGNAL-ATOMS></M-SIGNAL-ATOMS>
+    <M-SIGNAL-ICT></M-SIGNAL-ICT>
+    <M-SIGNAL-VOL></M-SIGNAL-VOL>
+    <M-SIGNAL-VWAP></M-SIGNAL-VWAP>
+    <M-SIGNAL-FRACTAL></M-SIGNAL-FRACTAL>
+    <M-SIGNAL-DIV></M-SIGNAL-DIV>
+    <M-SIGNAL-BARS></M-SIGNAL-BARS>
+    <M-STRATEGY-CORE></M-STRATEGY-CORE>
+    <M-STRATEGY-VANILLA></M-STRATEGY-VANILLA>
+    <M-STRATEGY-S01></M-STRATEGY-S01>
+    <M-STRATEGY-S02></M-STRATEGY-S02>
+    <M-STRATEGY-S05></M-STRATEGY-S05>
+    <M-STRATEGY-S20></M-STRATEGY-S20>
+    <M-STRATEGY-S28></M-STRATEGY-S28>
+    <M-STRATEGY-S34></M-STRATEGY-S34>
+    <M-STRATEGY-S38></M-STRATEGY-S38>
+    <M-EVALUATE></M-EVALUATE>
+    <M-CALIBRATE></M-CALIBRATE>
+    <M-OUTPUT></M-OUTPUT>
+    <M-DATA-BASE></M-DATA-BASE>
+    <M-DATA-CACHE></M-DATA-CACHE>
+  </module-registry>
 </grace:development-plan>

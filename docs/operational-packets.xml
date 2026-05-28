@@ -10,6 +10,22 @@
   <template id="execution-packet" name="Standard Module Execution">
     <description>Every CLI module invocation must conform to this packet. Write to the filesystem only within declared write_scope. Read only from declared read_only_files. Resume from state_files if interrupted.</description>
 
+    <retry_budget>3</retry_budget>
+
+    <stop_conditions>
+      <condition>quality gate failed — escalate to controller</condition>
+      <condition>3 consecutive failures — halt pipeline</condition>
+    </stop_conditions>
+
+    <checkpoint_fields>
+      <field name="module">M-XXX</field>
+      <field name="status">running|completed|failed</field>
+      <field name="assumptions">list of assumptions verified before execution</field>
+      <field name="commands">exact CLI commands executed</field>
+      <field name="evidence">output files, metrics, logs</field>
+      <field name="next_action">continue|retry|escalate|stop</field>
+    </checkpoint_fields>
+
     <fields>
       <field name="module" type="string" required="true" example="M-FETCH, M-TOKENIZE, M-FINE-TUNE">M-XXX module identifier from AGENTS.md namespace</field>
       <field name="phase" type="int" required="true" example="0, 1, 2, 3">Pipeline phase: 0=tokenizer, 1=finetune, 2=inference+backtest, 3=iteration</field>
@@ -526,5 +542,77 @@
       <item component="Equity curve + metrics" size="< 100 MB" />
     </budget>
   </template>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- EXECUTION PACKET TEMPLATE (XML-structured)                           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <ExecutionPacketTemplate>
+    <module>M-XXX</module>
+    <phase>0-3</phase>
+    <contract>input → output specification</contract>
+    <write_scope>files this module may create/modify</write_scope>
+    <read_only>files this module reads but must not modify</read_only>
+    <state_files>files that carry state between runs</state_files>
+    <max_retries>3</max_retries>
+    <retry-budget>3</retry-budget>
+    <stop-conditions>
+      <condition>quality gate failed — escalate to controller</condition>
+      <condition>3 consecutive failures — halt pipeline</condition>
+    </stop-conditions>
+    <checkpoint-fields>
+      <field name="module">M-XXX</field>
+      <field name="status">running|completed|failed</field>
+      <field name="assumptions">list of assumptions verified before execution</field>
+      <field name="commands">exact CLI commands executed</field>
+      <field name="evidence">output files, metrics, logs</field>
+      <field name="next_action">continue|retry|escalate|stop</field>
+    </checkpoint-fields>
+    <expected_artifacts>
+      <artifact path="data/v3/raw/*.parquet">M-FETCH output</artifact>
+      <artifact path="data/v3/processed/*.npy">M-PREPROCESS output</artifact>
+      <artifact path="data/v3/tokens/*.npy">M-TOKENIZE output</artifact>
+      <artifact path="data/v3/predictions/*.parquet">M-PREDICT output</artifact>
+      <artifact path="data/v3/results/*.parquet">M-BACKTEST output</artifact>
+    </expected_artifacts>
+  </ExecutionPacketTemplate>
+
+  <GraphDeltaTemplate>
+    <changed_since_commit>HEAD</changed_since_commit>
+    <affected_modules>list of M-XXX modules changed</affected_modules>
+    <manifest_changes>new/modified manifest keys</manifest_changes>
+    <contract_changes>contracts added/modified/removed</contract_changes>
+    <dependency_changes>new/removed module dependencies</dependency_changes>
+  </GraphDeltaTemplate>
+
+  <VerificationDeltaTemplate>
+    <verification_id>V-M-XXX-N</verification_id>
+    <status>pass|fail|skip</status>
+    <command>exact reproduction command</command>
+    <expected>expected output pattern</expected>
+    <actual>actual output</actual>
+    <blocking>true|false — does failure block pipeline?</blocking>
+  </VerificationDeltaTemplate>
+
+  <FailurePacketTemplate>
+    <failed_module>M-XXX</failed_module>
+    <symptom_exact>exact log line or error message</symptom_exact>
+    <from_failure_catalog>reference to docs/operations/failures.md</from_failure_catalog>
+    <attempted_fixes>list of fixes tried before escalation</attempted_fixes>
+    <blocking_flag>true|false</blocking_flag>
+    <suggested_next>retry|escalate|skip|halt</suggested_next>
+  </FailurePacketTemplate>
+
+  <CheckpointReportTemplate>
+    <phase>N</phase>
+    <module>M-XXX</module>
+    <timestamp>ISO 8601</timestamp>
+    <assumptions_verified>list of assumptions confirmed valid</assumptions_verified>
+    <commands_executed>exact CLI commands with exit codes</commands_executed>
+    <artifacts_produced>file paths with sizes/row counts</artifacts_produced>
+    <metrics_summary>key metrics (Sharpe, WR, etc.)</metrics_summary>
+    <verification_results>list of V-M-XXX-N results</verification_results>
+    <next_action>continue|retry|escalate|stop</next_action>
+    <retry_remaining>N</retry_remaining>
+  </CheckpointReportTemplate>
 
 </grace:operational-packets>
