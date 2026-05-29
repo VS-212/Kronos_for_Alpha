@@ -190,6 +190,27 @@ M-QUARTERLY  src/evaluation/quarterly.py      Quarterly breakdown + CSV output
 M-REGIME     src/evaluation/regime.py         BB regime + temporal analysis
 ```
 
+## GRACE Artifact Management Pipeline
+
+```
+make grace-deep-dry  (or scripts/grace-full-refresh.sh --dry-run)
+  ├─ grace lint --profile autonomous  → Level 1 gate
+  └─ python scripts/audit_grace_coverage.py  → manifest.json (gaps report)
+
+make grace-deep  (or scripts/grace-full-refresh.sh --auto)
+  ├─ Audit → manifest.json
+  ├─ GRACE Orchestrator (.opencode/agents/grace-orchestrator.md)
+  │   ├─ Work split (max 8 units/agent)
+  │   ├─ Spawn N workers (.opencode/agents/grace-worker.md)
+  │   │   └─ Each: scan layer → add KG nodes/edges → add contracts → add V-M entries
+  │   ├─ Post-flight: cross-layer edges + AGENTS.md table + lint + reviewer
+  │   └─ Commit + report (docs/grace-work/sessions/{ts}/report.md)
+  └─ Result: synchronized artifacts, 0 critical issues
+
+Config: config/global.yaml → grace.deep_refresh
+Prompts: .opencode/agents/grace-orchestrator.md, .opencode/agents/grace-worker.md
+```
+
 ## Agent Commands
 
 | Command | Module | Status |
@@ -215,6 +236,10 @@ M-REGIME     src/evaluation/regime.py         BB regime + temporal analysis
 | `python -m src.strategies.registry --import-csv PATH` | M-REGISTRY | ✅ ready |
 | `python -m src.cli.backtest --strategy wf --name my-test --pl 12` | M-CLI-BT | ✅ ready |
 | `python -m src.cli.compare --ref "WF+BB%B+BBmom+rollWR noTP" --test signals.npy` | M-CLI-CMP | ✅ ready |
+| `make grace-deep-dry` | M-GRACE | ✅ ready |
+| `make grace-deep --auto` | M-GRACE | ✅ ready |
+| `make grace-deep-layer LAYER=evaluation` | M-GRACE | ✅ ready |
+| `python scripts/audit_grace_coverage.py --summary` | M-GRACE | ✅ ready |
 | _rest_ | M-* | ❌ future |
 
 ## Docs (read by situation)

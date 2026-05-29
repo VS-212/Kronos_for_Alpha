@@ -66,3 +66,4 @@ wandb/
 # OpenCode
 .opencode/audits/
 .coverage
+sessions/

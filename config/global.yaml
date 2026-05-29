@@ -271,3 +271,22 @@ monitoring:
   checkpoint_freq: 100                    # steps
   save_best: true
   metric_for_best: sharpe
+
+# ── GRACE Artifact Management ─────────────────────────────────────────────────
+grace:
+  deep_refresh:
+    enabled: true                           # allow Level 2 deep sync
+    auto_approve: false                     # NEVER auto-fix without review
+    auto_push: false                        # push after commit? (default: false)
+    max_units_per_agent: 8                  # split layer if > 8 modules with issues
+    min_units_per_agent: 1                  # merge layer if < 1
+    layers:                                 # which source layers to cover
+      - evaluation
+      - signals
+      - data
+      - strategies
+      - core
+      - cli
+    session_dir: docs/grace-work/sessions   # output directory for reports
+    checkpoint: true                        # enable checkpoint-based resume
+    report_format: markdown                 # session report format
