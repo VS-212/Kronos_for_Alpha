@@ -316,4 +316,359 @@ Status: ✅ ready
 
 ---
 
+### M-KRONOS-REGISTRY: Model Registry and Base Model Interface
+
+File: `src/core/registry.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Model registry and base model ABC for Kronos inference (register/get/list models) |
+| Input | DataFrame with columns ['open','high','low','close'] and datetime index; model name/class |
+| Output | Prediction DataFrame with ['open','high','low','close','volume','amount']; registered model instances |
+| Functions | `BaseModel.predict()`, `BaseModel.load()`, `BaseModel.predict_batch()`, `BaseModel.__call__()`, `register_model()`, `get_model()`, `list_models()` |
+| Guarantees | Registry is singleton in process; lazy default registrations avoid circular imports; BaseModel ABC enforces `predict()` and `load()` contract; `get_model()` raises `KeyError` for unknown names |
+
+---
+
+### M-SIGNAL-ATOMS: Composable Signal Atoms
+
+File: `src/signals/atoms.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Composable signal atoms from Kronos sample predictions — pure numpy, no pandas |
+| Input | `(sample_count, pred_len)` close-price array + `prev_close` scalar |
+| Output | dict of derived signals: direction, consensus, boundaries, dispersion, trend_strength, linearity, asymmetry, belief_weight, expectancy |
+| Functions | `direction()`, `consensus()`, `boundaries()`, `dispersion()`, `trend_strength()`, `linearity()`, `asymmetry()`, `belief_weight()`, `expectancy()` |
+| Guarantees | Pure numpy (no torch/pandas), composable atom interface, per-sample vectorization |
+
+---
+
+### M-SIGNAL-BARS: Candlestick Pattern Classifier
+
+File: `src/signals/bars.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Japanese candlestick pattern classifier — 15 bar types with forward probability estimation |
+| Input | OHLCV arrays + optional lookback/min_samples for conditional probability |
+| Output | bar type string + dict of {bar_type: {p_up, p_down, avg_ret, count}} |
+| Functions | `classify_bar()`, `compute_bar_probs()`, `bar_signal()`, `print_bar_summary()` |
+| Guarantees | 15 distinct bar types (Doji, Marubozu, Hammer, Engulfing, Harami, etc.), minimum samples threshold, signal edge filtering |
+
+---
+
+### M-SIGNAL-BOLLINGER: Bollinger Bands Signal
+
+File: `src/signals/bollinger.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Bollinger Bands computation, price position relative to bands, squeeze detection, combined signal |
+| Input | `(N,)` close price array |
+| Output | dict with sma, upper, lower, width, zone, pct_bandwidth, is_extreme, is_squeeze, mr_long/mr_short |
+| Functions | `compute_bb()`, `bb_position()`, `bb_squeeze()`, `bb_signal()` |
+| Guarantees | Pure numpy + pandas rolling, no lookahead, configurable period/std_mult, NaN-safe for early bars |
+
+---
+
+### M-SIGNAL-DIV: RSI/OBV/MFI Divergence Detection
+
+File: `src/signals/divergence.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Divergence detection atoms — RSI (daily reset), OBV, MFI with swing-point divergence analysis |
+| Input | OHLCV arrays + `is_day_start` boolean array |
+| Output | dict with indicator values (rsi, obv, mfi) + divergence flags per indicator |
+| Functions | `rsi()`, `obv_data()`, `mfi()`, `detect_divergence()`, `compute_all()` |
+| Guarantees | Daily RSI/MFI reset (no gap contamination), swing-point analysis (peaks/valleys with order config), pure numpy |
+
+### M-DATA-BASE: Abstract DataSource Interface
+
+File: `src/data/base.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Abstract base class for financial time-series data sources |
+| Input | Subclass implements: ticker, interval, start, end |
+| Output | DataFrame with DatetimeIndex (begin) and OHLCV columns |
+| Functions | `fetch_candles()`, `fetch_securities()`, `fetch_index_candles()` |
+| Guarantees | All methods are abstract — enforces DataSource contract via ABC; no default implementation; subclasses must implement all 3 methods |
+
+---
+
+### M-DATA-CACHE: Parquet-Backed Data Cache
+
+File: `src/data/cache.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Deterministic parquet-backed cache for OHLCV DataFrames |
+| Input | `key(str)` — deterministic string; `DataFrame` to cache via `put()` |
+| Output | Cached DataFrame via `get(key)` or `None` on miss |
+| Functions | `get()`, `put()`, `key()` |
+| Guarantees | Idempotent (put same key twice = overwrite same file); deterministic key generation from ticker/interval/start/end; corrupt cache files auto-removed with warning |
+
+---
+
+### M-STRATEGY-WF: WF Baseline Strategy
+
+File: `src/strategies/verified/s01_wf.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Walk-forward q90/q10 signal generation with TP/SL execution |
+| Input | data dict with keys: N, wf_q90, wf_q10, pred_ret |
+| Output | metrics dict + per_bar PnL via run_backtest |
+| Functions | `run()`, `_build_signal()` |
+| Guarantees | Signal long when pred_ret > wf_q90, short when pred_ret < wf_q10; no lookahead (uses pre-computed walk-forward quantiles) |
+
+---
+
+### M-STRATEGY-BBPCT: WF+BB%B Strategy (no TP)
+
+File: `src/strategies/verified/s02_bb_pct.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Walk-forward signal filtered by BB %B position, no take-profit |
+| Input | data dict with keys: N, wf_q90, wf_q10, pred_ret |
+| Output | metrics dict + per_bar PnL via run_backtest_custom |
+| Functions | `run()`, `_build_wf_signal()` |
+| Guarantees | WF signal filtered by %B position (only enter when %B confirms direction); no take-profit via get_tp_sl_no_tp |
+
+---
+
+### M-STRATEGY-BBMOM: WF+BB%B+BBmom Strategy (no TP)
+
+File: `src/strategies/verified/s03_bb_mom.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Walk-forward signal filtered by BB %B position and BB momentum expansion, no take-profit |
+| Input | data dict with keys: N, wf_q90, wf_q10, pred_ret |
+| Output | metrics dict + per_bar PnL via run_backtest_custom |
+| Functions | `run()`, `_build_wf_signal()` |
+| Guarantees | WF signal filtered by %B position AND BB momentum expansion (both must confirm direction); no take-profit via get_tp_sl_no_tp |
+
+---
+
+### M-STRATEGY-BBROLLWR: WF+BB%B+BBmom+rollWR Champion
+
+File: `src/strategies/verified/s04_bb_rollwr.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Champion strategy — WF signal filtered by BB %B position, BB momentum expansion, and rolling win rate |
+| Input | data dict with keys: N, wf_q90, wf_q10, pred_ret |
+| Output | metrics dict + per_bar PnL via run_backtest_custom |
+| Functions | `run()`, `_build_wf_signal()` |
+| Guarantees | Triple-filtered signal: %B position + BB momentum + rolling win rate all confirm direction; champion Sharpe 23.51 at PL=12/sc=5; no take-profit via get_tp_sl_no_tp |
+
+### M-CALIBRATE: Hyperparameter Sweep Runner
+
+File: `src/evaluation/calibrate.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Two-pass hyperparameter sweep over Kronos model inference config (pred_len → T/top_p/sample_count) |
+| Input | config.yaml + global.yaml; KronosModel; MOEX data for calibration ticker (default SBER) |
+| Output | `src/evaluation/results.json` with best config: pred_len, T, top_p, sample_count |
+| Functions | `main()`, `load_config()`, `fetch_data()`, `_random_indices()`, `pass_1_pred_len_sweep()`, `pass_2_param_sweep()` |
+| Guarantees | Two-pass optimization (pred_len then T/top_p/sc), cache-aware data loading, reproducible via seeded random indices |
+
+---
+
+### M-EVALUATE: Per-Window Evaluation Metrics
+
+File: `src/evaluation/evaluate.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Compute 14 calibration metrics from actual OHLCV and Kronos per-sample predictions per window |
+| Input | actual_df (OHLCV DataFrame), samples (ndarray S×N×6), prev_close (float), tp/sl quantiles |
+| Output | dict with 14+ metrics: direction_accuracy, consensus_dir_acc, expectancy, consensus_sharpe, return_correlation, ic_rank, bias, mae, prediction_volatility, max_drawdown_simple |
+| Functions | `evaluate()` |
+| Guarantees | Stateless pure function, handles edge cases (flat predictions, missing scipy), SL priority over TP, consensus filtering at 4/5 threshold |
+
+---
+
+### M-METRICS: Financial Strategy Evaluation Metrics
+
+File: `src/evaluation/metrics.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Standalone financial metrics library for strategy evaluation — used by M-BACKTEST, M-ENGINE, M-EVALUATE |
+| Input | Returns array, equity array, pred/actual arrays |
+| Output | Individual metric values (sharpe_ratio, max_drawdown, win_rate, psr, dsr, etc.) |
+| Functions (18) | `sharpe_ratio()`, `sortino_ratio()`, `max_drawdown()`, `profit_factor()`, `win_rate()`, `calmar_ratio()`, `direction_accuracy()`, `direction_sharpe()`, `return_correlation()`, `ic_rank()`, `bias()`, `mae()`, `prediction_volatility()`, `avg_return()`, `n_trades()`, `trade_pct()`, `psr()`, `dsharpe_ratio()` |
+| Class | `StrategyMetrics` — structured container with `from_trades()` factory |
+| Guarantees | Pure functions (no side effects), optional scipy with graceful degradation, handles edge cases (empty/single-element arrays), PSR/DSR with skewness/kurtosis correction |
+
+---
+
+### M-OUTPUT: Compact Result Serialization
+
+File: `src/evaluation/output.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Save/load per-window prediction samples, belief metrics, and monthly summaries to compact parquet/npy/JSON |
+| Input | Windows list, ticker, config dict; DataFrame or numpy arrays |
+| Output | Parquet files (samples, monthly metrics), .npy files (beliefs), JSON (summary, metadata) |
+| Functions | `save_samples()`, `load_samples()`, `reconstruct()`, `compute_monthly_metrics()`, `save_monthly_metrics()`, `trade_summary()`, `save_beliefs()`, `load_beliefs()`, `save_summary()` |
+| Guarantees | Compact blob storage (~700 KB for 3K windows), lossless roundtrip via np.frombuffer, metadata alongside binary data, lazy import of M-EVALUATE |
+
+---
+
+### M-WALK-FORWARD: Walk-Forward Validation Pipeline
+
+File: `src/evaluation/walk_forward.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Generate non-overlapping prediction windows from Mamba dataset, batch-infer via Kronos model, save per-window samples + monthly aggregate metrics |
+| Input | Mamba parquet path (from MAMBA_PATH env or config), ticker, KronosModel, config (pred_len, T, top_p, sample_count) |
+| Output | Per-window samples parquet + monthly metrics parquet + summary JSON |
+| Functions | `load_mamba_data()`, `extract_ticker()`, `filter_main_session()`, `generate_windows()`, `group_windows_by_month()`, `run_batch_inference()`, `main()` |
+| CLI | `python -m src.evaluation.walk_forward --ticker SBER --month 2025-01`, `--full` for all months |
+| Guarantees | Non-overlapping windows (step=pred_len), main-session filter (10:00-18:40), batch inference with sub-batch split to avoid GPU OOM, walk-forward date range from config |
+
+### M-KRONOS-MODEL: Kronos Transformer Model
+
+File: `src/core/kronos/model.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Hierarchical dual-token (s1, s2) Transformer — token IDs → logits for pre and post tokens |
+| Input | `s1_ids, s2_ids` [B,T] int64, `stamp` [B,T,5] (optional), `padding_mask` (optional), teacher forcing flags |
+| Output | `(s1_logits [B,T,V_s1], s2_logits [B,T,V_s2])` — logits for s1 and s2 token predictions |
+| Functions | `forward()`, `decode_s1()`, `decode_s2()`, `_init_weights()` |
+| Guarantees | Causal masking via RoPE, RMSNorm normalization, hierarchical dual-head with dependency-aware s2 conditioning via cross-attention, teacher-forcing support |
+
+---
+
+### M-KRONOS-MODULES: Kronos NN Building Blocks
+
+File: `src/core/kronos/modules.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Reusable neural network building blocks — quantizer, attention, embeddings, normalization |
+| Input | Varies by component (tensors, configuration parameters) |
+| Output | Varies by component (tensor outputs, loss values, codebook indices) |
+| Functions (16) | `BinarySphericalQuantizer`, `BSQuantizer`, `RMSNorm`, `FeedForward`, `RotaryPositionalEmbedding`, `MultiHeadAttentionWithRoPE`, `MultiHeadCrossAttentionWithRoPE`, `HierarchicalEmbedding`, `DependencyAwareLayer`, `TransformerBlock`, `DualHead`, `FixedEmbedding`, `TemporalEmbedding`, `DifferentiableEntropyFunction`, `codebook_entropy` |
+| Guarantees | Modular composability, RoPE-based attention, BSQ with soft/hard entropy, no project-internal dependencies (pure PyTorch + einops) |
+
+---
+
+### M-KRONOS-PREDICTOR: Kronos Inference Runner
+
+File: `src/core/kronos/predictor.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Autoregressive inference — tokenizer + model → OHLCV predictions + belief state |
+| Input | OHLCV context [B,T,6], model + tokenizer from HuggingFace |
+| Output | MC-averaged OHLCV preds [B,pred_len,6] or raw MC paths [B,sample_count,pred_len,6]; optional belief [B,sample_count,pred_len,4] with confidence, entropy, top3_mass, entropy_ratio |
+| Functions | `KronosPredictor.generate()`, `.predict()`, `.predict_batch()`, `KronosModel.predict_samples()`, `.predict_samples_batch()`, `.predict_batch()`, `load_model()`, `auto_regressive_inference()`, `auto_regressive_inference_raw()`, `sample_from_logits()`, `top_k_top_p_filtering()`, `calc_time_stamps()` |
+| Guarantees | Deterministic seed per MC path (batch-size-independent), bf16 precision, top-k/top-p nucleus sampling, session filtering, parallel batch inference |
+| CLI | `python -m src.core.kronos.predictor --feats X --timestamps Y --output Z --pred-len 12 --lookback 500 --seed 42 --bf16 --belief` |
+
+---
+
+### M-KRONOS-TOKENIZER: Kronos VQ-VAE Tokenizer (Core)
+
+File: `src/core/kronos/tokenizer.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | VQ-VAE tokenizer — encode OHLCV [B,T,6] → discrete token IDs, decode back → reconstruction |
+| Input | OHLCV tensor [B,T,6] |
+| Output | `((z_pre, z), bsq_loss, quantized, z_indices)` — reconstructed s1/full tensors, quantizer loss and state |
+| Functions | `forward()`, `encode()`, `decode()`, `indices_to_bits()` |
+| Guarantees | Binary Spherical Quantization (BSQ), HuggingFace Hub publishing (PyTorchModelHubMixin), frozen during fine-tune, supports half-mode (s1/s2 split encoding) |
+
+### M-SIGNAL-FRACTAL: Williams Fractal Pattern Detection
+
+File: `src/signals/fractal.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Detect Williams Fractals (bullish/bearish), fractal breakouts, fractal clusters, AO-confirmed fractal signals |
+| Input | OHLCV arrays (high, low, close) + parameters: max_age (default 12), tolerance (default 0.002), min_cluster (default 2) |
+| Output | dict with signal ("bullish"|"bearish"|"none"), age, level; AO value for AO variant |
+| Functions | `find_fractals()`, `fractal_signal()`, `breakout_signal()`, `cluster_signal()`, `compute_ao()`, `ao_fractal_signal()` |
+| Guarantees | Pure numpy, no lookahead (fractal uses 2 bars each side), cluster groups fractals by price proximity, AO uses SMA5/SMA34 median crossover |
+
+---
+
+### M-SIGNAL-ICT: ICT/SMC Signal Generation Toolkit
+
+File: `src/signals/ict.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Generate ICT/Smart Money Concepts signals — order blocks, fair value gaps, liquidity sweeps, market structure shifts, breaker blocks, premium/discount zones, equal highs/lows |
+| Input | OHLCV arrays + parameters (lookback, max_age, n_bars, move_threshold, tolerance, volume_mult) |
+| Output | dict with signal type, level/zone info, age, confluence count |
+| Functions (9) | `detect_swings()`, `detect_order_block()`, `detect_fvg()`, `detect_fvg_multi()`, `detect_liquidity_sweep()`, `detect_premium_discount()`, `detect_mss()`, `detect_breaker_block()`, `detect_volume_ob()`, `detect_eqh_eql()` |
+| Guarantees | Pure numpy, configurable swing detection (3/5-bar), FVG multi-confluence detection, volume-filtered OB with configurable multiplier |
+
+---
+
+### M-SIGNAL-VOL: Volatility Signals (ATR/ADR/Regime)
+
+File: `src/signals/volatility.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Compute ATR with percentile ranking, ADR (Average Daily Range) with percentile, classify volatility regime (compression/expansion/neutral) |
+| Input | OHLCV arrays + is_day_start boolean array + parameters (atr_period=14, adr_period=20, percentile_threshold=0.3) |
+| Output | dict with atr, atr_pct, low_vol/high_vol flags, adr, current_range, range_ratio, percentile, regime string |
+| Functions | `compute_atr()`, `compute_adr()`, `volatility_regime()` |
+| Guarantees | Pure numpy, ATR via EMA of True Range, ADR uses daily bars from is_day_start markers, regime combines ATR percentile + ADR range percentile |
+
+---
+
+### M-SIGNAL-VWAP: VWAP Signals
+
+File: `src/signals/vwap.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Compute Volume-Weighted Average Price with standard deviation bands, cross detection, anchored VWAP |
+| Input | OHLCV arrays + volume + is_day_start boolean array + k (std dev multiplier, default 2.0) |
+| Output | dict with vwap, upper/lower bands, sigma, zscore, pct_pos, below_vwap/above_vwap flags, near_lower/near_upper, outside_lower/outside_upper, crossed_up/crossed_down |
+| Functions | `compute_vwap()`, `anchored_vwap()` |
+| Guarantees | Pure numpy, VWAP resets per trading day (is_day_start), cumulative sigma computation, cross detection over last 2 candles, anchored VWAP from arbitrary start index |
+
+---
+
 *Ported from kronos-alpha/docs/module-contracts.md. Revision: 1.1.*

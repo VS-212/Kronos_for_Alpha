@@ -33,6 +33,7 @@
     <node id="M-SIGNAL-FRACTAL"  name="Williams Fractal Detection"       file="src/signals/fractal.py"                category="signal"     status="✅ ready"     phase="2+" />
     <node id="M-SIGNAL-DIV"      name="RSI/OBV/MFI Divergence"           file="src/signals/divergence.py"             category="signal"     status="✅ ready"     phase="2+" />
     <node id="M-SIGNAL-BARS"     name="Candlestick Pattern Classifier"   file="src/signals/bars.py"                   category="signal"     status="✅ ready"     phase="2+" />
+    <node id="M-SIGNAL-BOLLINGER" name="Bollinger Bands Signal"         file="src/signals/bollinger.py"              category="signal"     status="✅ ready"     phase="2+" />
 
     <!-- Strategies (9) -->
     <node id="M-STRATEGY-CORE"   name="Shared Strategy Engine"           file="src/strategies/pending/core.py"        category="strategy"   status="✅ ready (moved to pending)" phase="2+" />
@@ -56,7 +57,7 @@
     <node id="M-KRONOS-TOKENIZER" name="KronosTokenizer (VQ-VAE)"        file="src/core/kronos/tokenizer.py"          category="core-model" status="✅ ready"     phase="0,1,2" />
     <node id="M-KRONOS-MODEL"    name="Kronos Transformer Model"         file="src/core/kronos/model.py"              category="core-model" status="✅ ready"     phase="1,2" />
     <node id="M-KRONOS-PREDICTOR" name="Kronos Inference Runner"         file="src/core/kronos/predictor.py"          category="core-model" status="✅ ready"     phase="2" />
-    <node id="M-KRONOS-REGISTRY" name="Kronos Model Registry"            file="src/core/kronos/—"                     category="core-model" status="❌ future"    phase="all" />
+    <node id="M-KRONOS-REGISTRY" name="Kronos Model Registry"            file="src/core/registry.py"                  category="core-model" status="✅ ready"    phase="all" />
 
     <!-- Data layer (3) -->
     <node id="M-DATA-BASE"       name="Abstract DataSource Interface"    file="src/data/base.py"                      category="data"       status="✅ ready"     phase="all" />
@@ -75,6 +76,10 @@
     <node id="M-STRATEGY-BBMOM"   name="WF+BB%B+BBmom Champion (Sharpe 22.91)" file="src/strategies/verified/s03_bb_mom.py" category="strategy"   status="✅ ready"     phase="2+" />
     <node id="M-STRATEGY-BBROLLWR" name="WF+BB%B+BBmom+rollWR Champion (Sharpe 23.51)" file="src/strategies/verified/s04_bb_rollwr.py" category="strategy" status="✅ ready" phase="2+" />
     <node id="M-REGISTRY" name="Strategy Registry" file="src/strategies/registry.py" category="strategy" status="✅ ready" phase="2+" />
+
+    <!-- CLI (2) -->
+    <node id="M-CLI-BT" name="Single SBER Backtest CLI" file="src/cli/backtest.py" category="cli" status="✅ ready" phase="2+" />
+    <node id="M-CLI-CMP" name="SBER Backtest Comparison CLI" file="src/cli/compare.py" category="cli" status="✅ ready" phase="2+" />
   </nodes>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -121,6 +126,7 @@
     <edge source="M-KRONOS-PREDICTOR" target="M-KRONOS-MODEL"   relation="depends_on" />
     <edge source="M-KRONOS-PREDICTOR" target="M-KRONOS-TOKENIZER" relation="depends_on" />
     <edge source="M-KRONOS-REGISTRY"  target="M-KRONOS-MODEL"   relation="manages"    />
+    <edge source="M-KRONOS-REGISTRY"  target="M-KRONOS-PREDICTOR" relation="depends_on" />
 
     <!-- ── Data layer internals ── -->
     <edge source="M-DATA-MOEX"   target="M-DATA-BASE"       relation="implements"    />
@@ -172,6 +178,7 @@
 
     <!-- ── Evaluation internals ── -->
     <edge source="M-EVALUATE"         target="M-METRICS"          relation="uses"     />
+    <edge source="M-OUTPUT"           target="M-EVALUATE"         relation="depends_on" />
     <edge source="M-WALK-FORWARD"     target="M-KRONOS-MODEL"     relation="depends_on" />
     <edge source="M-WALK-FORWARD"     target="M-EVALUATE"         relation="uses"     />
     <edge source="M-WALK-FORWARD"     target="M-OUTPUT"           relation="uses"     />
@@ -180,6 +187,9 @@
     <edge source="M-CALIBRATE"        target="M-WALK-FORWARD"     relation="consumes_output" />
     <edge source="M-CALIBRATE"        target="M-METRICS"          relation="uses"     />
     <edge source="M-CALIBRATE"        target="M-DATA-MOEX"        relation="uses"     />
+    <edge source="M-CALIBRATE"        target="M-DATA-CACHE"       relation="uses"     />
+    <edge source="M-CALIBRATE"        target="M-EVALUATE"         relation="uses"     />
+    <edge source="M-CALIBRATE"        target="M-KRONOS-MODEL"     relation="depends_on" />
 
     <!-- ── SBER Backtest Evaluation ── -->
     <edge source="M-ENGINE"       target="M-SIM"            relation="uses" />
@@ -203,6 +213,16 @@
     <edge source="M-STRATEGY-BBPCT"    target="M-REGISTRY"  relation="registered_in" />
     <edge source="M-STRATEGY-BBMOM"    target="M-REGISTRY"  relation="registered_in" />
     <edge source="M-STRATEGY-BBROLLWR" target="M-REGISTRY"  relation="registered_in" />
+
+    <!-- ── CLI modules ── -->
+    <edge source="M-CLI-BT"  target="M-LOAD-SBER"  relation="depends_on" />
+    <edge source="M-CLI-BT"  target="M-ENGINE"     relation="depends_on" />
+    <edge source="M-CLI-BT"  target="M-SIM"        relation="depends_on" />
+    <edge source="M-CLI-BT"  target="M-REGISTRY"   relation="depends_on" />
+    <edge source="M-CLI-CMP" target="M-LOAD-SBER"  relation="depends_on" />
+    <edge source="M-CLI-CMP" target="M-ENGINE"     relation="depends_on" />
+    <edge source="M-CLI-CMP" target="M-SIM"        relation="depends_on" />
+    <edge source="M-CLI-CMP" target="M-REGISTRY"   relation="depends_on" />
 
     <!-- ── Generic: all modules read config ── -->
     <edge source="M-KRONOS-TOKENIZER" target="M-CONFIG"          relation="reads_config" />
@@ -264,6 +284,7 @@
       <node id="M-SIGNAL-FRACTAL" />
       <node id="M-SIGNAL-DIV" />
       <node id="M-SIGNAL-BARS" />
+      <node id="M-SIGNAL-BOLLINGER" />
     </level>
 
     <!-- Strategies (depends on signals + core) -->
@@ -365,5 +386,7 @@
     <M-STRATEGY-BBPCT></M-STRATEGY-BBPCT>
     <M-STRATEGY-BBMOM></M-STRATEGY-BBMOM>
     <M-STRATEGY-BBROLLWR></M-STRATEGY-BBROLLWR>
+    <M-CLI-BT></M-CLI-BT>
+    <M-CLI-CMP></M-CLI-CMP>
   </module-registry>
 </grace:knowledge-graph>

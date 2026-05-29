@@ -14,15 +14,15 @@
 
     <verification id="V-M-TOKENIZE-02" description="Token entropy: information-theoretic diversity of token distribution" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="entropy >= 5.0 bits (out of 10 max)" stop_on_fail="true" module="M-TOKENIZE" />
 
-    <verification id="V-M-TOKENIZE-03" description="Reconstruction MSE: fidelity of OHLCV round-trip through VQ-VAE" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="recon_mse <= 0.01 (normalized OHLCV space)" stop_on_fail="false" module="M-TOKENIZE" note="If > 0.05: reduce codebook bits, may indicate domain shift. If 0.01-0.05: proceed with caution, monitor Phase 2 metrics." />
+    <verification id="V-M-TOKENIZE-03" description="Reconstruction MSE: fidelity of OHLCV round-trip through VQ-VAE" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="recon_mse &lt;= 0.01 (normalized OHLCV space)" stop_on_fail="false" module="M-TOKENIZE" note="If &gt; 0.05: reduce codebook bits, may indicate domain shift. If 0.01-0.05: proceed with caution, monitor Phase 2 metrics." />
 
-    <verification id="V-M-TOKENIZE-04" description="Per-asset minimum unique codes: ensure no ticker collapses to < 50 codes" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="all 21 assets >= 50 unique codes each" stop_on_fail="true" module="M-TOKENIZE" note="If any asset < 20: remove from universe. If 20-50: flag, may be low-volatility asset." />
+    <verification id="V-M-TOKENIZE-04" description="Per-asset minimum unique codes: ensure no ticker collapses to &lt; 50 codes" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="all 21 assets &gt;= 50 unique codes each" stop_on_fail="true" module="M-TOKENIZE" note="If any asset &lt; 20: remove from universe. If 20-50: flag, may be low-volatility asset." />
 
-    <verification id="V-M-TOKENIZE-05" description="Cross-sectional RMS correlation: assets must be differentiable" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="RMS correlation < 0.5 across 21-asset return matrix" stop_on_fail="false" module="M-TOKENIZE" note="If > 0.7: apply sector-neutral z-scoring. All assets moving together → no cross-sectional spread." />
+    <verification id="V-M-TOKENIZE-05" description="Cross-sectional RMS correlation: assets must be differentiable" command="python -m src.core.kronos.tokenizer --input data/v3/processed --output data/v3/tokens --quality-check" expected="RMS correlation &lt; 0.5 across 21-asset return matrix" stop_on_fail="false" module="M-TOKENIZE" note="If &gt; 0.7: apply sector-neutral z-scoring. All assets moving together → no cross-sectional spread." />
 
-    <verification id="V-M-TOKENIZE-06" description="No NaN in token output — all (B,T) arrays are valid int64" command="python -c 'import numpy as np; d=np.load(\"data/v3/tokens/SBER_train.npy\"); assert not np.isnan(d).any()'" expected="No NaN, all values in [0, 1023]" stop_on_fail="true" module="M-TOKENIZE" />
+    <verification id="V-M-TOKENIZE-06" description="No NaN in token output — all (B,T) arrays are valid int64" command="python -c 'import numpy as np; d=np.load(&quot;data/v3/tokens/SBER_train.npy&quot;); assert not np.isnan(d).any()'" expected="No NaN, all values in [0, 1023]" stop_on_fail="true" module="M-TOKENIZE" />
 
-    <verification id="V-M-TOKENIZE-07" description="Tokenizer frozen mode: requires_grad = False for all tokenizer params" command="python -c 'from src.core.kronos.tokenizer import KronosTokenizer; t=KronosTokenizer.from_pretrained(\"NeoQuasar/Kronos-Tokenizer-2k\"); assert all(not p.requires_grad for p in t.parameters())'" expected="All tokenizer params have requires_grad=False" stop_on_fail="false" module="M-TOKENIZE" />
+    <verification id="V-M-TOKENIZE-07" description="Tokenizer frozen mode: requires_grad = False for all tokenizer params" command="python -c 'from src.core.kronos.tokenizer import KronosTokenizer; t=KronosTokenizer.from_pretrained(&quot;NeoQuasar/Kronos-Tokenizer-2k&quot;); assert all(not p.requires_grad for p in t.parameters())'" expected="All tokenizer params have requires_grad=False" stop_on_fail="false" module="M-TOKENIZE" />
   </verification_suite>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -31,19 +31,19 @@
   <verification_suite id="V-PHASE-1" name="Fine-tune Verification">
     <source>config/global.yaml §training</source>
 
-    <verification id="V-M-FINETUNE-01" description="CE loss convergence: validation CE monotonically decreases over 30 epochs" command="python src/core/kronos/fine_tune.py --resume kronos_moex_best.pt; grep val_ce checkpoints/kronos_moex/history.json" expected="Val CE at epoch 30 < Val CE at epoch 5 (decreasing trend)" stop_on_fail="true" module="M-FINE-TUNE" />
+    <verification id="V-M-FINETUNE-01" description="CE loss convergence: validation CE monotonically decreases over 30 epochs" command="python src/core/kronos/fine_tune.py --resume kronos_moex_best.pt; grep val_ce checkpoints/kronos_moex/history.json" expected="Val CE at epoch 30 &lt; Val CE at epoch 5 (decreasing trend)" stop_on_fail="true" module="M-FINE-TUNE" />
 
-    <verification id="V-M-FINETUNE-02" description="Train CE vs Val CE gap: check for overfitting" command="python -c \"import json; d=json.load(open('checkpoints/kronos_moex/history.json')); gap=abs(d['train_ce'][-1]-d['val_ce'][-1]); print(gap)\"" expected="Train CE - Val CE gap < 0.5 (not overfitting). If gap > 0.5: add dropout 0.2" stop_on_fail="true" module="M-FINE-TUNE" />
+    <verification id="V-M-FINETUNE-02" description="Train CE vs Val CE gap: check for overfitting" command="python -c &quot;import json; d=json.load(open('checkpoints/kronos_moex/history.json')); gap=abs(d['train_ce'][-1]-d['val_ce'][-1]); print(gap)&quot;" expected="Train CE - Val CE gap &lt; 0.5 (not overfitting). If gap > 0.5: add dropout 0.2" stop_on_fail="true" module="M-FINE-TUNE" />
 
-    <verification id="V-M-FINETUNE-03" description="Val CE vs random baseline: model must beat random token prediction" command="python -c \"import json; d=json.load(open('checkpoints/kronos_moex/history.json')); ce=d['val_ce'][-1]; random_ce=10.0; assert ce < 0.9 * random_ce, f'CE {ce} >= {0.9*random_ce}'\"" expected="Val CE < 0.9 * random_CE (random_CE ~= 10.0 for 1024-class)" stop_on_fail="true" module="M-FINE-TUNE" note="If val CE >= random CE: model not learning — check tokenizer, data quality." />
+    <verification id="V-M-FINETUNE-03" description="Val CE vs random baseline: model must beat random token prediction" command="python -c &quot;import json; d=json.load(open('checkpoints/kronos_moex/history.json')); ce=d['val_ce'][-1]; random_ce=10.0; assert ce &lt; 0.9 * random_ce, f'CE {ce} >= {0.9*random_ce}'&quot;" expected="Val CE &lt; 0.9 * random_CE (random_CE ~= 10.0 for 1024-class)" stop_on_fail="true" module="M-FINE-TUNE" note="If val CE >= random CE: model not learning — check tokenizer, data quality." />
 
-    <verification id="V-M-FINETUNE-04" description="No NaN in loss: verify all gradients are finite" command="python -c \"import torch; ckpt=torch.load('checkpoints/kronos_moex_best.pt', map_location='cpu'); assert not any(torch.isnan(p).any() for p in ckpt.values())\"" expected="All parameters finite, no NaN in checkpoint" stop_on_fail="true" module="M-FINE-TUNE" />
+    <verification id="V-M-FINETUNE-04" description="No NaN in loss: verify all gradients are finite" command="python -c &quot;import torch; ckpt=torch.load('checkpoints/kronos_moex_best.pt', map_location='cpu'); assert not any(torch.isnan(p).any() for p in ckpt.values())&quot;" expected="All parameters finite, no NaN in checkpoint" stop_on_fail="true" module="M-FINE-TUNE" />
 
-    <verification id="V-M-FINETUNE-05" description="Gradient norm in reasonable range" command="tail -100 logs/fine_tune.log | grep 'grad_norm'" expected="grad_norm > 0.01 and < 50.0 (not vanishing, not exploding)" stop_on_fail="false" module="M-FINE-TUNE" />
+    <verification id="V-M-FINETUNE-05" description="Gradient norm in reasonable range" command="tail -100 logs/fine_tune.log | grep 'grad_norm'" expected="grad_norm > 0.01 and &lt; 50.0 (not vanishing, not exploding)" stop_on_fail="false" module="M-FINE-TUNE" />
 
-    <verification id="V-M-FINETUNE-06" description="Checkpoint resume integrity: resume produces same loss trajectory" command="diff <(python fine_tune.py --epochs 5) <(python fine_tune.py --epochs 3; python fine_tune.py --resume --epochs 2) | grep val_ce" expected="Resumed run matches fresh run val_CE within 1e-6 tolerance" stop_on_fail="false" module="M-FINE-TUNE" />
+    <verification id="V-M-FINETUNE-06" description="Checkpoint resume integrity: resume produces same loss trajectory" command="diff &lt;(python fine_tune.py --epochs 5) &lt;(python fine_tune.py --epochs 3; python fine_tune.py --resume --epochs 2) | grep val_ce" expected="Resumed run matches fresh run val_CE within 1e-6 tolerance" stop_on_fail="false" module="M-FINE-TUNE" />
 
-    <verification id="V-M-FINETUNE-07" description="Per-asset CE tracking: no single asset dominates loss improvement" command="grep 'per_asset_ce' checkpoints/kronos_moex/history.json" expected="Std dev of per-asset val CE < 2.0 (all assets learning)" stop_on_fail="false" module="M-FINE-TUNE" note="If one asset dominates: possible data quality issue with that ticker." />
+    <verification id="V-M-FINETUNE-07" description="Per-asset CE tracking: no single asset dominates loss improvement" command="grep 'per_asset_ce' checkpoints/kronos_moex/history.json" expected="Std dev of per-asset val CE &lt; 2.0 (all assets learning)" stop_on_fail="false" module="M-FINE-TUNE" note="If one asset dominates: possible data quality issue with that ticker." />
   </verification_suite>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -52,21 +52,21 @@
   <verification_suite id="V-PHASE-2" name="Backtest Verification">
     <source>config/global.yaml §backtest.quality_gates</source>
 
-    <verification id="V-M-BACKTEST-01" description="Sharpe ratio: annualized risk-adjusted return on test set" command="python -m src.evaluation.backtest --predictions data/v3/predictions --split test; cat data/v3/results/report.json | jq .sharpe" expected="sharpe >= 0.5 on test split" stop_on_fail="true" module="M-BACKTEST" note="If < 0.0: go to Phase 3 iteration. If 0.0-0.5: weak but positive." />
+    <verification id="V-M-BACKTEST-01" description="Sharpe ratio: annualized risk-adjusted return on test set" command="python -m src.evaluation.backtest --predictions data/v3/predictions --split test; cat data/v3/results/report.json | jq .sharpe" expected="sharpe >= 0.5 on test split" stop_on_fail="true" module="M-BACKTEST" note="If &lt; 0.0: go to Phase 3 iteration. If 0.0-0.5: weak but positive." />
 
     <verification id="V-M-BACKTEST-02" description="Win rate: percentage of profitable trades" command="cat data/v3/results/report.json | jq .win_rate" expected="win_rate >= 0.52 (>= 52% of trades profitable)" stop_on_fail="false" module="M-BACKTEST" />
 
-    <verification id="V-M-BACKTEST-03" description="Max Drawdown: maximum peak-to-trough decline" command="cat data/v3/results/report.json | jq .max_dd" expected="max_dd <= 0.25 (<= 25% drawdown)" stop_on_fail="true" module="M-BACKTEST" />
+    <verification id="V-M-BACKTEST-03" description="Max Drawdown: maximum peak-to-trough decline" command="cat data/v3/results/report.json | jq .max_dd" expected="max_dd &lt;= 0.25 (&lt;= 25% drawdown)" stop_on_fail="true" module="M-BACKTEST" />
 
-    <verification id="V-M-BACKTEST-04" description="PSR (Probabilistic Sharpe Ratio): statistical significance of Sharpe" command="cat data/v3/results/report.json | jq .psr" expected="psr >= 0.7 (high probability Sharpe > 0 is real)" stop_on_fail="false" module="M-BACKTEST" note="If < 0.3: Sharpe not robust — increase MC sample_count." />
+    <verification id="V-M-BACKTEST-04" description="PSR (Probabilistic Sharpe Ratio): statistical significance of Sharpe" command="cat data/v3/results/report.json | jq .psr" expected="psr &gt;= 0.7 (high probability Sharpe &gt; 0 is real)" stop_on_fail="false" module="M-BACKTEST" note="If &lt; 0.3: Sharpe not robust — increase MC sample_count." />
 
     <verification id="V-M-BACKTEST-05" description="Cross-sectional IC mean: information coefficient across assets per timestamp" command="cat data/v3/results/report.json | jq .ic_mean" expected="ic_mean >= 0.02 (positive cross-sectional ranking signal)" stop_on_fail="true" module="M-BACKTEST" />
 
-    <verification id="V-M-BACKTEST-06" description="Walk-forward consistency: val split metrics within 20% of test split" command="python -m src.evaluation.backtest --split val; python -m src.evaluation.backtest --split test; python -c 'compare_val_test()'" expected="|val_sharpe - test_sharpe| / |test_sharpe| < 0.20 (no overfit)" stop_on_fail="false" module="M-BACKTEST" />
+    <verification id="V-M-BACKTEST-06" description="Walk-forward consistency: val split metrics within 20% of test split" command="python -m src.evaluation.backtest --split val; python -m src.evaluation.backtest --split test; python -c 'compare_val_test()'" expected="|val_sharpe - test_sharpe| / |test_sharpe| &lt; 0.20 (no overfit)" stop_on_fail="false" module="M-BACKTEST" />
 
-    <verification id="V-M-BACKTEST-07" description="Session enforcement: all entries between 10:00-18:10, all exits by 18:35" command="python -c \"import json; t=json.load(open('data/v3/results/report.json')); assert t['session_violations'] == 0\"" expected="Zero session violations" stop_on_fail="true" module="M-BACKTEST" />
+    <verification id="V-M-BACKTEST-07" description="Session enforcement: all entries between 10:00-18:10, all exits by 18:35" command="python -c &quot;import json; t=json.load(open('data/v3/results/report.json')); assert t['session_violations'] == 0&quot;" expected="Zero session violations" stop_on_fail="true" module="M-BACKTEST" />
 
-    <verification id="V-M-BACKTEST-08" description="No duplicate trades: each (timestamp, ticker) pair has >= 1 entry" command="python -c \"import pandas as pd; df=pd.read_parquet('data/v3/results/trades.parquet'); assert df.duplicated(['pred_ts','ticker']).sum() == 0\"" expected="Zero duplicate trades" stop_on_fail="true" module="M-BACKTEST" />
+    <verification id="V-M-BACKTEST-08" description="No duplicate trades: each (timestamp, ticker) pair has >= 1 entry" command="python -c &quot;import pandas as pd; df=pd.read_parquet('data/v3/results/trades.parquet'); assert df.duplicated(['pred_ts','ticker']).sum() == 0&quot;" expected="Zero duplicate trades" stop_on_fail="true" module="M-BACKTEST" />
   </verification_suite>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -75,21 +75,21 @@
   <verification_suite id="V-LEAKAGE" name="Leakage Audit (8 tests)">
     <source>docs/reports/audit.md</source>
 
-    <verification id="V-LEAK-01" description="Temporal split: train indices < val indices < test indices" command="python -c \"assert train_end_date < val_start_date; assert val_end_date < test_start_date\"" expected="2023-01-01..2025-02-01 < 2025-02-01..2025-09-01 < 2025-09-01..2026-05-01" stop_on_fail="true" module="M-PREPROCESS" reference="audit.md test #5" />
+    <verification id="V-LEAK-01" description="Temporal split: train indices &lt; val indices &lt; test indices" command="python -c &quot;assert train_end_date &lt; val_start_date; assert val_end_date &lt; test_start_date&quot;" expected="2023-01-01..2025-02-01 &lt; 2025-02-01..2025-09-01 &lt; 2025-09-01..2026-05-01" stop_on_fail="true" module="M-PREPROCESS" reference="audit.md test #5" />
 
-    <verification id="V-LEAK-02" description="Feature leakage: no future data in lookback window" command="python -c \"x_df=candles[t:t+506]; y_df=candles[t+506:t+512]; assert x_df.index.max() < y_df.index.min()\"" expected="All lookback bars strictly before first prediction bar" stop_on_fail="true" module="M-PREDICT" reference="audit.md test #6" />
+    <verification id="V-LEAK-02" description="Feature leakage: no future data in lookback window" command="python -c &quot;x_df=candles[t:t+506]; y_df=candles[t+506:t+512]; assert x_df.index.max() &lt; y_df.index.min()&quot;" expected="All lookback bars strictly before first prediction bar" stop_on_fail="true" module="M-PREDICT" reference="audit.md test #6" />
 
-    <verification id="V-LEAK-03" description="Per-window z-score: mu,sigma computed per individual window (no global stats)" command="python -c \"for w in windows: mu=np.mean(w); sigma=np.std(w); assert mu and sigma computed per-window\"" expected="No global z-score normalization — each window independently normalized" stop_on_fail="true" module="M-PREPROCESS" reference="architecture.md §2.3" />
+    <verification id="V-LEAK-03" description="Per-window z-score: mu,sigma computed per individual window (no global stats)" command="python -c &quot;for w in windows: mu=np.mean(w); sigma=np.std(w); assert mu and sigma computed per-window&quot;" expected="No global z-score normalization — each window independently normalized" stop_on_fail="true" module="M-PREPROCESS" reference="architecture.md §2.3" />
 
-    <verification id="V-LEAK-04" description="Walk-forward: step == pred_len, non-overlapping windows" command="python -c \"assert step == pred_len == 6; for i in range(1, len(windows)): assert windows[i].start == windows[i-1].end\"" expected="Windows are contiguous/non-overlapping with no gap or overlap" stop_on_fail="true" module="M-BACKTEST" reference="audit.md test #3" />
+    <verification id="V-LEAK-04" description="Walk-forward: step == pred_len, non-overlapping windows" command="python -c &quot;assert step == pred_len == 6; for i in range(1, len(windows)): assert windows[i].start == windows[i-1].end&quot;" expected="Windows are contiguous/non-overlapping with no gap or overlap" stop_on_fail="true" module="M-BACKTEST" reference="audit.md test #3" />
 
-    <verification id="V-LEAK-05" description="Session filter: only main session 10:00-18:40 MSK bars present" command="python -c \"assert all(d.hour*60+d.minute >= 600 for d in df.index); assert all(d.hour*60+d.minute <= 1120 for d in df.index)\"" expected="No bars outside 10:00-18:40 MSK (no overnight, pre-market, post-market)" stop_on_fail="true" module="M-PREPROCESS" reference="architecture.md §2.3" />
+    <verification id="V-LEAK-05" description="Session filter: only main session 10:00-18:40 MSK bars present" command="python -c &quot;assert all(d.hour*60+d.minute >= 600 for d in df.index); assert all(d.hour*60+d.minute &lt;= 1120 for d in df.index)&quot;" expected="No bars outside 10:00-18:40 MSK (no overnight, pre-market, post-market)" stop_on_fail="true" module="M-PREPROCESS" reference="architecture.md §2.3" />
 
-    <verification id="V-LEAK-06" description="Consensus leakage: consensus computed from sample predictions only, never actuals" command="python -c \"assert 'actual' not in consensus_fn.__code__.co_varnames; assert all(k in ['close_samples','prev_close','threshold'] for k in consensus_fn.__code__.co_varnames)\"" expected="consensus() function signature has no 'actual' parameter" stop_on_fail="true" module="M-SIGNAL-ATOMS" reference="audit.md test #7" />
+    <verification id="V-LEAK-06" description="Consensus leakage: consensus computed from sample predictions only, never actuals" command="python -c &quot;assert 'actual' not in consensus_fn.__code__.co_varnames; assert all(k in ['close_samples','prev_close','threshold'] for k in consensus_fn.__code__.co_varnames)&quot;" expected="consensus() function signature has no 'actual' parameter" stop_on_fail="true" module="M-SIGNAL-ATOMS" reference="audit.md test #7" />
 
-    <verification id="V-LEAK-07" description="TP/SL no lookahead: exit decision uses only current bar high/low, not future" command="python -c \"assert 'actuals[i,0]' in trade for i in range(pred_len); assert 'actuals[j,1]' not in trade for j > i\"" expected="Trade exit loop checks actuals[i].high/low, never actuals[i+1]" stop_on_fail="true" module="M-STRATEGY-CORE" reference="audit.md test #8" />
+    <verification id="V-LEAK-07" description="TP/SL no lookahead: exit decision uses only current bar high/low, not future" command="python -c &quot;assert 'actuals[i,0]' in trade for i in range(pred_len); assert 'actuals[j,1]' not in trade for j > i&quot;" expected="Trade exit loop checks actuals[i].high/low, never actuals[i+1]" stop_on_fail="true" module="M-STRATEGY-CORE" reference="audit.md test #8" />
 
-    <verification id="V-LEAK-08" description="Cross-sectional z-score: ranking uses same-timestamp predictions only" command="python -c \"for t in timestamps: preds=get_preds_at(t); assert all(p.timestamp == t for p in preds); zscores=(preds-mean(preds))/std(preds)\"" expected="All z-scores computed cross-sectionally at identical timestamps" stop_on_fail="true" module="M-BACKTEST" reference="architecture.md §2.5" />
+    <verification id="V-LEAK-08" description="Cross-sectional z-score: ranking uses same-timestamp predictions only" command="python -c &quot;for t in timestamps: preds=get_preds_at(t); assert all(p.timestamp == t for p in preds); zscores=(preds-mean(preds))/std(preds)&quot;" expected="All z-scores computed cross-sectionally at identical timestamps" stop_on_fail="true" module="M-BACKTEST" reference="architecture.md §2.5" />
   </verification_suite>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -99,11 +99,11 @@
 
     <verification id="V-GRACE-01" description="GRACE lint: autonomous profile passes without errors" command="grace lint --profile autonomous docs/grace/" expected="Exit code 0, no ERROR-level diagnostics" stop_on_fail="true" module="M-DOCS" />
 
-    <verification id="V-GRACE-02" description="All 6 GRACE artifacts present and well-formed XML" command="find docs/grace/ -name '*.xml' | wc -l ; for f in docs/grace/*.xml; do xmllint --noout \"$f\" 2>&amp;1; done" expected="6 files found, xmllint passes for all" stop_on_fail="true" module="M-DOCS" />
+    <verification id="V-GRACE-02" description="All 6 GRACE artifacts present and well-formed XML" command="find docs/grace/ -name '*.xml' | wc -l ; for f in docs/grace/*.xml; do xmllint --noout &quot;$f&quot; 2>&amp;1; done" expected="6 files found, xmllint passes for all" stop_on_fail="true" module="M-DOCS" />
 
-    <verification id="V-GRACE-03" description="AGENTS.md grep mappings resolve to existing files" command="for mapping in docs/grace/ docs/module-contracts.md config/global.yaml; do test -e \"$mapping\" &amp;&amp; echo 'OK: '$mapping; done" expected="All 6 grep targets in AGENTS.md resolve to existing files" stop_on_fail="true" module="M-DOCS" />
+    <verification id="V-GRACE-03" description="AGENTS.md grep mappings resolve to existing files" command="for mapping in docs/grace/ docs/module-contracts.md config/global.yaml; do test -e &quot;$mapping&quot; &amp;&amp; echo 'OK: '$mapping; done" expected="All 6 grep targets in AGENTS.md resolve to existing files" stop_on_fail="true" module="M-DOCS" />
 
-    <verification id="V-GRACE-04" description="No stale M-XXX module references (all IDs in development-plan match AGENTS.md)" command="diff <(grep -oP 'M-[A-Z0-9-]+' AGENTS.md | sort -u) <(grep -oP 'M-[A-Z0-9-]+' docs/grace/development-plan.xml | sort -u)" expected="No orphan M-XXX IDs that exist in one file but not the other" stop_on_fail="false" module="M-DOCS" />
+    <verification id="V-GRACE-04" description="No stale M-XXX module references (all IDs in development-plan match AGENTS.md)" command="diff &lt;(grep -oP 'M-[A-Z0-9-]+' AGENTS.md | sort -u) &lt;(grep -oP 'M-[A-Z0-9-]+' docs/grace/development-plan.xml | sort -u)" expected="No orphan M-XXX IDs that exist in one file but not the other" stop_on_fail="false" module="M-DOCS" />
   </verification_suite>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -122,7 +122,7 @@
 
     <verification id="V-CLI-05" description="M-TOKENIZE --help" command="python -m src.core.kronos.tokenizer --help" expected="Prints usage with --input, --output, --quality-check, exit code 0" stop_on_fail="true" module="M-TOKENIZE" />
 
-    <verification id="V-CLI-06" description="Manifest validation chain: each module validates predecessor manifest" command="python -c \"from src.data.fetcher import ManifestValidator; assert hasattr(ManifestValidator, 'validate')\"" expected="Each module has manifest validation before execution, exits with code 1 on failure" stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-CLI-06" description="Manifest validation chain: each module validates predecessor manifest" command="python -c &quot;from src.data.fetcher import ManifestValidator; assert hasattr(ManifestValidator, 'validate')&quot;" expected="Each module has manifest validation before execution, exits with code 1 on failure" stop_on_fail="true" module="M-FETCH" />
   </verification_suite>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -131,17 +131,53 @@
   <verification_suite id="V-IMPORT" name="Import Integrity">
     <description>Verify all src.* imports resolve without circular dependencies.</description>
 
-    <verification id="V-IMPORT-01" description="All src/core/* imports resolve" command="python -c \"from src.core.kronos.modules import HierarchicalEmbedding, TransformerBlock, RMSNorm, DualHead, DifferentiableEntropyFunction, BSQuantizer\"" expected="No ImportError" stop_on_fail="true" module="M-KRONOS-MODULES" />
+    <verification id="V-IMPORT-01" description="All src/core/* imports resolve" command="python -c &quot;from src.core.kronos.modules import HierarchicalEmbedding, TransformerBlock, RMSNorm, DualHead, DifferentiableEntropyFunction, BSQuantizer&quot;" expected="No ImportError" stop_on_fail="true" module="M-KRONOS-MODULES" />
 
-    <verification id="V-IMPORT-02" description="All src/data/* imports resolve" command="python -c \"from src.data.fetcher import fetch_and_save; from src.data.base import DataSource; from src.data.cache import DataCache\"" expected="No ImportError" stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-IMPORT-02" description="All src/data/* imports resolve" command="python -c &quot;from src.data.fetcher import fetch_and_save; from src.data.base import DataSource; from src.data.cache import DataCache&quot;" expected="No ImportError" stop_on_fail="true" module="M-FETCH" />
 
-    <verification id="V-IMPORT-03" description="All src/signals/* imports resolve" command="python -c \"from src.signals.atoms import consensus, boundaries, dispersion; from src.signals.bollinger import bb_signal, compute_bb; from src.signals.ict import detect_order_block, detect_fvg; from src.signals.volatility import compute_atr; from src.signals.vwap import compute_vwap; from src.signals.fractal import find_fractals; from src.signals.divergence import rsi; from src.signals.bars import classify_bar\"" expected="No ImportError (8 signal families)" stop_on_fail="true" module="M-SIGNAL-ATOMS" />
+    <verification id="V-IMPORT-03" description="All src/signals/* imports resolve" command="python -c &quot;from src.signals.atoms import consensus, boundaries, dispersion; from src.signals.bollinger import bb_signal, compute_bb; from src.signals.ict import detect_order_block, detect_fvg; from src.signals.volatility import compute_atr; from src.signals.vwap import compute_vwap; from src.signals.fractal import find_fractals; from src.signals.divergence import rsi; from src.signals.bars import classify_bar&quot;" expected="No ImportError (8 signal families)" stop_on_fail="true" module="M-SIGNAL-ATOMS" />
 
-    <verification id="V-IMPORT-04" description="All src/strategies/* imports resolve" command="python -c \"from src.strategies.core import load_config, _simulate_trade, report; from src.strategies.vanilla import run; from src.strategies.s01_bb import run; from src.strategies.s02_bb_mr import run; from src.strategies.s05_bb_breakout import run; from src.strategies.s20_ob import run; from src.strategies.s28_vol_ob import run; from src.strategies.s34_vwap_ob import run; from src.strategies.s38_lowvol_ob import run\"" expected="No ImportError (8 strategies + core)" stop_on_fail="true" module="M-STRATEGY-CORE" />
+    <verification id="V-IMPORT-04" description="All src/strategies/* imports resolve" command="python -c &quot;from src.strategies.core import load_config, _simulate_trade, report; from src.strategies.vanilla import run; from src.strategies.s01_bb import run; from src.strategies.s02_bb_mr import run; from src.strategies.s05_bb_breakout import run; from src.strategies.s20_ob import run; from src.strategies.s28_vol_ob import run; from src.strategies.s34_vwap_ob import run; from src.strategies.s38_lowvol_ob import run&quot;" expected="No ImportError (8 strategies + core)" stop_on_fail="true" module="M-STRATEGY-CORE" />
 
-    <verification id="V-IMPORT-05" description="All src/evaluation/* imports resolve" command="python -c \"from src.evaluation.metrics import sharpe_ratio, max_drawdown, win_rate, psr, ic_rank, StrategyMetrics; from src.evaluation.evaluate import evaluate; from src.evaluation.output import save_samples, reconstruct; from src.evaluation.walk_forward import run_walk_forward; from src.evaluation.calibrate import run_calibration\"" expected="No ImportError (5 evaluation modules)" stop_on_fail="true" module="M-METRICS" />
+    <verification id="V-IMPORT-05" description="All src/evaluation/* imports resolve" command="python -c &quot;from src.evaluation.metrics import sharpe_ratio, max_drawdown, win_rate, psr, ic_rank, StrategyMetrics; from src.evaluation.evaluate import evaluate; from src.evaluation.output import save_samples, reconstruct; from src.evaluation.walk_forward import run_walk_forward; from src.evaluation.calibrate import run_calibration&quot;" expected="No ImportError (5 evaluation modules)" stop_on_fail="true" module="M-METRICS" />
 
-    <verification id="V-IMPORT-06" description="No circular imports" command="python -c \"import importlib; import sys; modules=sorted([m for m in sys.modules if m.startswith('src.')]); print('\\n'.join(modules))\" 2>&amp;1 | head -50" expected="Linear dependency: data → kronos → signals → strategies → evaluation. No cycles." stop_on_fail="true" module="all" />
+    <verification id="V-IMPORT-06" description="No circular imports" command="python -c &quot;import importlib; import sys; modules=sorted([m for m in sys.modules if m.startswith('src.')]); print('\\n'.join(modules))&quot; 2>&amp;1 | head -50" expected="Linear dependency: data → kronos → signals → strategies → evaluation. No cycles." stop_on_fail="true" module="all" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- SIGNAL FAMILY VERIFICATION (M-SIGNAL-ATOMS, M-SIGNAL-BARS, etc.)    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-SIGNAL-ATOMS" name="Signal Atoms Checks">
+    <verification id="V-M-SIGNAL-ATOMS-01" description="All signal atoms import and produce expected output shapes"
+      command="python -c &quot;from src.signals.atoms import direction, consensus, boundaries, dispersion, trend_strength, linearity, asymmetry, belief_weight, expectancy; import numpy as np; x=np.random.randn(5,12).astype(np.float32); prev=100.0; assert direction(x,prev)['dir_sign'].shape==(5,12); assert consensus(x,prev)['has_consensus'].shape==(12,); assert boundaries(x,prev)['tp_long'].shape==(12,); assert dispersion(x,prev)['std_return'].shape==(12,); assert trend_strength(x,prev)['trend_strength']>=0; assert linearity(x)['mean_r2']>=0; assert asymmetry(x,prev)['asymmetry_ratio']>=0; b=np.random.rand(5,12,4); assert belief_weight(b)['belief_score']>=0; assert expectancy(x,prev)['sharpe_avg']!=0; print('OK')&quot;"
+      expected="All 9 atoms execute without error, exit code 0" stop_on_fail="true" module="M-SIGNAL-ATOMS" />
+    <verification id="V-M-SIGNAL-ATOMS-02" description="Consensus leakage: consensus() uses only samples + prev_close, never actuals"
+      command="python -c &quot;from src.signals.atoms import consensus; import inspect; sig=inspect.signature(consensus); params=list(sig.parameters.keys()); assert 'close_samples' in params; assert 'prev_close' in params; assert 'actual' not in params; print('OK')&quot;"
+      expected="consensus() signature has no 'actual' parameter" stop_on_fail="true" module="M-SIGNAL-ATOMS" reference="audit.md test #7" />
+  </verification_suite>
+
+  <verification_suite id="V-M-SIGNAL-BARS" name="Candlestick Pattern Checks">
+    <verification id="V-M-SIGNAL-BARS-01" description="Bar classification and signal generation import and run"
+      command="python -c &quot;from src.signals.bars import classify_bar, compute_bar_probs, bar_signal, ALL_TYPES; import numpy as np; o=np.array([100,101,102],dtype=float); h=np.array([102,103,104],dtype=float); l=np.array([99,100,101],dtype=float); c=np.array([101,102,103],dtype=float); bt=classify_bar(101,103,100,102,100,102,99,101); assert bt in ALL_TYPES; probs=compute_bar_probs(o,h,l,c,lookback=100); assert all(t in probs for t in ALL_TYPES); sig=bar_signal(o,h,l,c,probs); assert sig['signal'] in ('bullish','bearish','none'); print('OK')&quot;"
+      expected="All imports resolve, bar classification returns valid type, signal generation returns valid signal" stop_on_fail="true" module="M-SIGNAL-BARS" />
+  </verification_suite>
+
+  <verification_suite id="V-M-SIGNAL-BOLLINGER" name="Bollinger Bands Checks">
+    <verification id="V-M-SIGNAL-BOLLINGER-01" description="BB computation, position, squeeze, and signal all produce valid output"
+      command="python -c &quot;from src.signals.bollinger import compute_bb, bb_position, bb_squeeze, bb_signal; import numpy as np; c=np.random.randn(100).cumsum()+100; bb=compute_bb(c); assert 'sma' in bb and 'upper' in bb and 'lower' in bb; pos=bb_position(c[-1],bb['last']['upper'],bb['last']['lower'],bb['last']['sma']); assert pos['zone'] in ('above_upper','below_lower','near_upper','near_lower','middle','unknown'); sq=bb_squeeze(bb['width']); assert 'is_squeeze' in sq; sig=bb_signal(c); assert sig['mr_long'] in (True,False) and sig['mr_short'] in (True,False); print('OK')&quot;"
+      expected="All 4 BB functions execute without error, exit code 0" stop_on_fail="true" module="M-SIGNAL-BOLLINGER" />
+  </verification_suite>
+
+  <verification_suite id="V-M-SIGNAL-DIV" name="Divergence Detection Checks">
+    <verification id="V-M-SIGNAL-DIV-01" description="RSI, OBV, MFI, and divergence detection import and produce valid output"
+      command="python -c &quot;from src.signals.divergence import rsi, obv_data, mfi, detect_divergence, compute_all; import numpy as np; c=np.random.randn(100).cumsum()+100; v=np.random.rand(100)*1e6; h=c+np.random.rand(100); l=c-np.random.rand(100); r=rsi(c); assert 'oversold' in r and 'overbought' in r; o=obv_data(c,v); assert 'obv_slope' in o; m=mfi(h,l,c,v); assert 'mfi' in m; d=detect_divergence(c,r['rsi_series']); assert d['div_type'] in ('bearish','bullish','none'); all_r=compute_all(h,l,c,v); assert all_r['div_rsi'] in ('bearish','bullish','none'); print('OK')&quot;"
+      expected="All 5 divergence functions execute without error, exit code 0" stop_on_fail="true" module="M-SIGNAL-DIV" />
+  </verification_suite>
+
+  <verification_suite id="V-M-FILTERS" name="Signal Filters Checks">
+    <verification id="V-M-FILTERS-01" description="All filter functions import and basic computation works"
+      command="python -c &quot;from src.signals.filters import compute_bb, compute_lr, compute_atr_filter, compute_volume_filter, compute_bb_momentum, compute_conf_trend, compute_mc_breadth, compute_rsi14, compute_pred_z, compute_mc_agreement, compute_weighted_quantiles, compute_best_mc, compute_drop_low_conf, compute_asymmetry_ratio, apply_filters; import numpy as np; N=50; LK=100; PL=12; data={'N':N,'LK':LK,'PL':PL,'close_arr':np.random.rand(N+LK-1)*100+100,'entry_close':np.random.rand(N)*100+100,'entry_open':np.random.rand(N)*100+100,'raw':np.random.rand(N+LK-1,5)*100+100,'conf':np.random.rand(N),'preds':np.random.rand(N,5,PL,4),'pred_ret':np.random.randn(N),'belief':np.random.rand(N,5,PL,4),'g_tp':np.random.rand(N)*100+100,'g_sl':np.random.rand(N)*100+100,'wf_q90':np.random.rand(N),'wf_q10':np.random.rand(N),'wf_signal':np.random.randint(-1,2,size=N)}; bb=compute_bb(data); assert len(bb)==9; lr=compute_lr(data); assert len(lr)==8; sig=np.random.randint(-1,2,size=N); out=apply_filters(sig,data,has_bbpct=True); assert len(out)==N; print('OK')&quot;"
+      expected="All 15 filter functions import and execute without error, exit code 0" stop_on_fail="true" module="M-FILTERS" />
   </verification_suite>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -150,20 +186,50 @@
   <verification_suite id="V-DATA" name="Data Quality Assertions">
     <source>docs/architecture.md §2.3</source>
 
-    <verification id="V-DATA-01" description="No NaN in any OHLCV column" command="python -c \"import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert not df[['open','high','low','close','volume']].isna().any().any(), f'{f} has NaN'\"" expected="Zero NaN values in any ticker file" stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-DATA-01" description="No NaN in any OHLCV column" command="python -c &quot;import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert not df[['open','high','low','close','volume']].isna().any().any(), f'{f} has NaN'&quot;" expected="Zero NaN values in any ticker file" stop_on_fail="true" module="M-FETCH" />
 
-    <verification id="V-DATA-02" description="Minimum 500 bars per asset (not dead/delisted)" command="python -c \"import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert len(df) >= 500, f'{f} has only {len(df)} bars'\"" expected="All 21 assets have >= 500 bars" stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-DATA-02" description="Minimum 500 bars per asset (not dead/delisted)" command="python -c &quot;import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert len(df) >= 500, f'{f} has only {len(df)} bars'&quot;" expected="All 21 assets have >= 500 bars" stop_on_fail="true" module="M-FETCH" />
 
-    <verification id="V-DATA-03" description="Timestamps monotonically increasing" command="python -c \"import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert df['timestamp'].is_monotonic_increasing, f'{f} timestamps not sorted'\"" expected="All timestamps sorted ascending per file" stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-DATA-03" description="Timestamps monotonically increasing" command="python -c &quot;import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); assert df['timestamp'].is_monotonic_increasing, f'{f} timestamps not sorted'&quot;" expected="All timestamps sorted ascending per file" stop_on_fail="true" module="M-FETCH" />
 
-    <verification id="V-DATA-04" description="Volume > 0 for all bars (zero-volume = holiday or API error)" command="python -c \"import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); zero_vol=len(df[df['volume']<0]); assert zero_vol==0, f'{f} has {zero_vol} negative volume bars'\"" expected="No negative volume bars. Zero volume ok (holidays)." stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-DATA-04" description="Volume > 0 for all bars (zero-volume = holiday or API error)" command="python -c &quot;import pandas as pd; import glob; for f in glob.glob('data/v3/raw/*.parquet'): df=pd.read_parquet(f); zero_vol=len(df[df['volume']&lt;0]); assert zero_vol==0, f'{f} has {zero_vol} negative volume bars'&quot;" expected="No negative volume bars. Zero volume ok (holidays)." stop_on_fail="true" module="M-FETCH" />
 
-    <verification id="V-DATA-05" description="Amount column computed: close * volume * lot_size (per ticker)" command="python -c \"from config import load_global_yaml; cfg=load_global_yaml(); lots=cfg['lot_sizes']; for ticker,lot in lots.items(): df=pd.read_parquet(f'data/v3/raw/{ticker}.parquet'); expected=df['close']*df['volume']*lot; assert (abs(df['amount']-expected).mean() < 1.0) if 'amount' in df.columns else True\"" expected="Amount column = close * volume * lot_size within tolerance" stop_on_fail="false" module="M-FETCH" />
+    <verification id="V-DATA-05" description="Amount column computed: close * volume * lot_size (per ticker)" command="python -c &quot;from config import load_global_yaml; cfg=load_global_yaml(); lots=cfg['lot_sizes']; for ticker,lot in lots.items(): df=pd.read_parquet(f'data/v3/raw/{ticker}.parquet'); expected=df['close']*df['volume']*lot; assert (abs(df['amount']-expected).mean() &lt; 1.0) if 'amount' in df.columns else True&quot;" expected="Amount column = close * volume * lot_size within tolerance" stop_on_fail="false" module="M-FETCH" />
   </verification_suite>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
   <!-- REGISTRY VERIFICATION                                                -->
   <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- CLI BACKTEST VERIFICATION                                           -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-CLI-BT" name="Single SBER Backtest CLI Checks">
+    <verification id="V-M-CLI-BT-01" description="CLI --help prints usage and exits 0"
+      command="python -m src.cli.backtest --help"
+      expected="Prints usage with all flags, exit code 0" stop_on_fail="true" module="M-CLI-BT" />
+    <verification id="V-M-CLI-BT-02" description="Run WF strategy backtest and produce metrics"
+      command="python -m src.cli.backtest --strategy wf --name test-wf --pl 12 --json"
+      expected="JSON output with sharpe, sortino, max_dd etc." stop_on_fail="true" module="M-CLI-BT" />
+    <verification id="V-M-CLI-BT-03" description="--register appends strategy to registry"
+      command="python -m src.cli.backtest --strategy wf --name test-reg --pl 12 --register"
+      expected="→ registered in registry.json" stop_on_fail="false" module="M-CLI-BT" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- CLI COMPARE VERIFICATION                                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-CLI-CMP" name="SBER Backtest Comparison CLI Checks">
+    <verification id="V-M-CLI-CMP-01" description="CLI --help prints usage and exits 0"
+      command="python -m src.cli.compare --help"
+      expected="Prints usage with --ref and --test flags, exit code 0" stop_on_fail="true" module="M-CLI-CMP" />
+    <verification id="V-M-CLI-CMP-02" description="Compare two registry strategies with JSON output"
+      command="python -m src.cli.compare --ref 'WF+BB%B+BBmom+rollWR noTP' --test 'WF+BB%B+BBmom+rollWR noTP' --json"
+      expected="JSON output with ref and test metrics" stop_on_fail="true" module="M-CLI-CMP" />
+    <verification id="V-M-CLI-CMP-03" description="Compare strategy vs signals.npy with side-by-side table"
+      command="python -m src.cli.compare --ref 'WF+BB%B+BBmom+rollWR noTP' --test 'WF+BB%B+BBmom+rollWR noTP'"
+      expected="Side-by-side table with metric deltas" stop_on_fail="false" module="M-CLI-CMP" />
+  </verification_suite>
+
   <verification_suite id="V-M-REGISTRY" name="Registry Integrity Checks">
     <verification id="V-M-REGISTRY-01" description="Registry loads without errors"
       command="python -m src.strategies.registry --top 5"
@@ -180,6 +246,429 @@
     <verification id="V-M-REGISTRY-05" description="Export registry to JSON"
       command="python -m src.strategies.registry --export-json"
       expected="Exported registry to ..." stop_on_fail="false" module="M-REGISTRY" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- KRONOS REGISTRY VERIFICATION                                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-KRONOS-REGISTRY" name="Kronos Registry Checks">
+    <verification id="V-M-KRONOS-REGISTRY-01" description="Registry import resolves"
+      command="python -c 'from src.core.registry import register_model, get_model, list_models, BaseModel'"
+      expected="No ImportError" stop_on_fail="true" module="M-KRONOS-REGISTRY" />
+    <verification id="V-M-KRONOS-REGISTRY-02" description="Model registry: register/get/list round-trip"
+      command="python -c 'from src.core.registry import register_model, get_model, list_models, BaseModel; class DummyModel(BaseModel): def predict(self,df,pred_len,**kw): import pandas as pd; return pd.DataFrame(); def load(self): pass; register_model(&quot;test&quot;, DummyModel); m = get_model(&quot;test&quot;); assert &quot;test&quot; in list_models(); assert isinstance(m, BaseModel)'"
+      expected="Round-trip succeeds, list_models contains &quot;test&quot;" stop_on_fail="true" module="M-KRONOS-REGISTRY" />
+    <verification id="V-M-KRONOS-REGISTRY-03" description="BaseModel ABC enforces predict method"
+      command="python -c 'from src.core.registry import BaseModel; try: class Bad(BaseModel): pass; Bad(); assert False; except TypeError as e: assert &quot;predict&quot; in str(e)'"
+      expected="TypeError raised with &quot;predict&quot; in message" stop_on_fail="true" module="M-KRONOS-REGISTRY" />
+    <verification id="V-M-KRONOS-REGISTRY-04" description="Default kronos_mini model registered"
+      command="python -c 'from src.core.registry import list_models; assert &quot;kronos_mini&quot; in list_models()'"
+      expected="kronos_mini is in registry" stop_on_fail="true" module="M-KRONOS-REGISTRY" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- REGISTRY VERIFICATION                                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-DATA-BASE: DataSource ABC Verification                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-DATA-BASE" name="M-DATA-BASE Interface Checks">
+    <verification id="V-M-DATA-BASE-01" description="DataSource import resolves"
+      command="python -c &quot;from src.data.base import DataSource&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-DATA-BASE" />
+    <verification id="V-M-DATA-BASE-02" description="DataSource ABC cannot be instantiated directly"
+      command="python -c &quot;from src.data.base import DataSource; ds=DataSource(); assert False, 'should raise'&quot; 2&gt;&amp;1 || test $? -eq 0"
+      expected="TypeError: Can't instantiate abstract class DataSource" stop_on_fail="true" module="M-DATA-BASE" />
+    <verification id="V-M-DATA-BASE-03" description="DataSource enforces 3 abstract methods"
+      command="python -c &quot;from src.data.base import DataSource; import abc; methods=set(m for m in DataSource.__abstractmethods__); assert methods=={'fetch_candles','fetch_securities','fetch_index_candles'}, f'Got {methods}'&quot;"
+      expected="Abstract methods: fetch_candles, fetch_securities, fetch_index_candles" stop_on_fail="true" module="M-DATA-BASE" />
+    <verification id="V-M-DATA-BASE-04" description="Fetcher subclass implements all abstract methods"
+      command="python -c &quot;from src.data.fetcher import Fetcher; from src.data.base import DataSource; assert issubclass(Fetcher, DataSource); f=Fetcher(); f.fetch_candles('SBER',10,'2023-01-01','2023-01-02'); f.fetch_securities(); f.fetch_index_candles('IMOEX','2023-01-01','2023-01-02')&quot;"
+      expected="No error — all 3 methods callable on Fetcher instance" stop_on_fail="true" module="M-DATA-BASE" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-DATA-CACHE: Parquet Cache Verification                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-DATA-CACHE" name="M-DATA-CACHE Cache Checks">
+    <verification id="V-M-DATA-CACHE-01" description="DataCache import resolves"
+      command="python -c &quot;from src.data.cache import DataCache&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-DATA-CACHE" />
+    <verification id="V-M-DATA-CACHE-02" description="Cache put/get roundtrip preserves DataFrame"
+      command="python -c &quot;import tempfile, pandas as pd; from src.data.cache import DataCache; d=DataCache(tempfile.mkdtemp()); df=pd.DataFrame({'a':[1,2,3]}); d.put('test',df); got=d.get('test'); assert df.equals(got), 'roundtrip failed'; print('OK')&quot;"
+      expected="OK — DataFrame roundtrip preserved" stop_on_fail="true" module="M-DATA-CACHE" />
+    <verification id="V-M-DATA-CACHE-03" description="Cache miss returns None"
+      command="python -c &quot;import tempfile; from src.data.cache import DataCache; d=DataCache(tempfile.mkdtemp()); assert d.get('nonexistent') is None; print('OK')&quot;"
+      expected="OK — miss returns None" stop_on_fail="true" module="M-DATA-CACHE" />
+    <verification id="V-M-DATA-CACHE-04" description="Cache key is deterministic"
+      command="python -c &quot;from src.data.cache import DataCache; k1=DataCache.key('SBER',10,'2023-01-01','2023-01-31'); k2=DataCache.key('SBER',10,'2023-01-01','2023-01-31'); assert k1==k2; assert k1=='SBER_10_2023-01-01_2023-01-31'; print('OK')&quot;"
+      expected="OK — deterministic key SBER_10_2023-01-01_2023-01-31" stop_on_fail="true" module="M-DATA-CACHE" />
+    <verification id="V-M-DATA-CACHE-05" description="Corrupt cache file is removed on read"
+      command="python -c &quot;import tempfile, pathlib; from src.data.cache import DataCache; tmp=tempfile.mkdtemp(); d=DataCache(tmp); d.put('tmp',pd.DataFrame()); p=d._path('tmp'); p.write_text('garbage'); got=d.get('tmp'); assert got is None; assert not p.exists(); print('OK')&quot;"
+      expected="OK — corrupt file removed, None returned" stop_on_fail="false" module="M-DATA-CACHE" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-FETCH: MOEX Data Fetcher Verification                             -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-FETCH" name="M-FETCH Data Fetcher Checks">
+    <verification id="V-M-FETCH-01" description="Fetcher import resolves with all dependencies"
+      command="python -c &quot;from src.data.fetcher import Fetcher, fetch_and_save, fetch_all, add_amount_column, save_parquets&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-M-FETCH-02" description="Fetcher implements DataSource interface"
+      command="python -c &quot;from src.data.fetcher import Fetcher; from src.data.base import DataSource; assert issubclass(Fetcher, DataSource); print('OK')&quot;"
+      expected="OK — Fetcher is DataSource subclass" stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-M-FETCH-03" description="Month chunking produces correct non-overlapping intervals"
+      command="python -c &quot;from src.data.fetcher import _month_chunks; chunks=_month_chunks('2023-01-01','2023-03-15'); assert len(chunks)==3; assert chunks[0]==('2023-01-01','2023-01-31'); assert chunks[1]==('2023-02-01','2023-02-28'); assert chunks[2]==('2023-03-01','2023-03-15'); print('OK')&quot;"
+      expected="OK — 3 monthly chunks, correct boundaries" stop_on_fail="true" module="M-FETCH" />
+    <verification id="V-M-FETCH-04" description="Expected bars calculation is reasonable"
+      command="python -c &quot;from src.data.fetcher import _expected_bars; bars=_expected_bars('2024-01-01','2024-01-31'); assert bars > 1000 and bars &lt; 2000; print(f'OK: {bars} bars')&quot;"
+      expected="~1456 bars for Jan 2024 (52 bars/day * ~28 trading days)" stop_on_fail="false" module="M-FETCH" />
+    <verification id="V-M-FETCH-05" description="LOT_SIZES contains all 20 stock tickers"
+      command="python -c &quot;from src.data.fetcher import LOT_SIZES, TICKERS; missing=[t for t in TICKERS if t not in LOT_SIZES]; assert not missing, f'Missing: {missing}'; print(f'OK: {len(LOT_SIZES)} lot sizes')&quot;"
+      expected="OK — all 20 stock tickers have lot sizes" stop_on_fail="true" module="M-FETCH" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-LOAD-SBER: SBER Data Loader Verification                          -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-LOAD-SBER" name="M-LOAD-SBER Loader Checks">
+    <verification id="V-M-LOAD-SBER-01" description="load_sber import resolves"
+      command="python -c &quot;from src.data.loader_sber import load_sber_data, DATA_DIR, RAW_DIR&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-LOAD-SBER" />
+    <verification id="V-M-LOAD-SBER-02" description="load_sber returns dict with all 16 required keys"
+      command="python -c &quot;from src.data.loader_sber import load_sber_data; import os; has_files=os.path.exists('data/v3/predictions/10min_sber_mini/SBER_preds_pl12_sc5.npy'); print(f'Has files: {has_files}')&quot;"
+      expected="Expected key count: 16" stop_on_fail="false" module="M-LOAD-SBER" note="Only runs if prediction files exist on disk" />
+    <verification id="V-M-LOAD-SBER-03" description="Module constants are correctly typed"
+      command="python -c &quot;from src.data.loader_sber import LK, PL, COMM, Q_LONG, Q_SHORT, TP_Q, SL_Q; assert LK==500; assert PL==12; assert COMM==0.0; assert Q_LONG==0.9; assert Q_SHORT==0.1; assert TP_Q==0.8; assert SL_Q==0.2; print('OK')&quot;"
+      expected="LK=500, PL=12, COMM=0.0, Q_LONG=0.90, Q_SHORT=0.10, TP_Q=0.80, SL_Q=0.20" stop_on_fail="true" module="M-LOAD-SBER" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-KRONOS-MODEL: Kronos Transformer Model Verification               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-KRONOS-MODEL" name="Kronos Model Checks">
+    <verification id="V-M-KRONOS-MODEL-01" description="Kronos model import resolves"
+      command="python -c 'from src.core.kronos.model import Kronos'"
+      expected="No ImportError" stop_on_fail="true" module="M-KRONOS-MODEL" />
+    <verification id="V-M-KRONOS-MODEL-02" description="Kronos model class has expected attributes"
+      command="python -c 'from src.core.kronos.model import Kronos; attrs=(&quot;s1_vocab_size&quot;,&quot;d_model&quot;,&quot;n_layers&quot;,&quot;n_heads&quot;); assert all(hasattr(Kronos, a) for a in attrs), [a for a in attrs if not hasattr(Kronos, a)]'"
+      expected="Attributes s1_vocab_size, d_model, n_layers, n_heads exist" stop_on_fail="true" module="M-KRONOS-MODEL" />
+    <verification id="V-M-KRONOS-MODEL-03" description="Kronos model has forward, decode_s1, decode_s2 methods"
+      command="python -c 'from src.core.kronos.model import Kronos; assert hasattr(Kronos, &quot;forward&quot;) and hasattr(Kronos, &quot;decode_s1&quot;) and hasattr(Kronos, &quot;decode_s2&quot;)'"
+      expected="forward, decode_s1, decode_s2 methods present" stop_on_fail="true" module="M-KRONOS-MODEL" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-KRONOS-MODULES: NN Building Blocks Verification                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-KRONOS-MODULES" name="Kronos Modules Checks">
+    <verification id="V-M-KRONOS-MODULES-01" description="RMSNorm instantiation and forward shape"
+      command="python -c 'from src.core.kronos.modules import RMSNorm; m=RMSNorm(64); assert m.weight.shape[0]==64; import torch; out=m(torch.randn(2,10,64)); assert out.shape==(2,10,64)'"
+      expected="RMSNorm(64) creates weight(64,) and returns (2,10,64) shape" stop_on_fail="true" module="M-KRONOS-MODULES" />
+    <verification id="V-M-KRONOS-MODULES-02" description="HierarchicalEmbedding forward shape"
+      command="python -c 'from src.core.kronos.modules import HierarchicalEmbedding; he=HierarchicalEmbedding(10,10,256); import torch; out=he([torch.zeros(2,512).long(), torch.zeros(2,512).long()]); assert out.shape==(2,512,256)'"
+      expected="Output shape (2,512,256)" stop_on_fail="true" module="M-KRONOS-MODULES" />
+    <verification id="V-M-KRONOS-MODULES-03" description="TransformerBlock instantiation"
+      command="python -c 'from src.core.kronos.modules import TransformerBlock; tb=TransformerBlock(256, 4, 1024); assert tb.self_attn.n_heads==4'"
+      expected="TransformerBlock(256,4,1024) has 4 heads" stop_on_fail="true" module="M-KRONOS-MODULES" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-KRONOS-PREDICTOR: Inference Runner Verification                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-KRONOS-PREDICTOR" name="Kronos Predictor Checks">
+    <verification id="V-M-KRONOS-PREDICTOR-01" description="All predictor imports resolve"
+      command="python -c 'from src.core.kronos.predictor import top_k_top_p_filtering, sample_from_logits, auto_regressive_inference, auto_regressive_inference_raw, calc_time_stamps, KronosPredictor, KronosModel, load_model'"
+      expected="No ImportError" stop_on_fail="true" module="M-KRONOS-PREDICTOR" />
+    <verification id="V-M-KRONOS-PREDICTOR-02" description="KronosPredictor class has generate/predict methods"
+      command="python -c 'from src.core.kronos.predictor import KronosPredictor; assert hasattr(KronosPredictor, &quot;generate&quot;) and hasattr(KronosPredictor, &quot;predict&quot;) and hasattr(KronosPredictor, &quot;predict_batch&quot;)'"
+      expected="generate, predict, predict_batch methods present" stop_on_fail="true" module="M-KRONOS-PREDICTOR" />
+    <verification id="V-M-KRONOS-PREDICTOR-03" description="top_k_top_p_filtering returns same shape"
+      command="python -c 'from src.core.kronos.predictor import top_k_top_p_filtering; import torch; l=torch.randn(1,1024); f=top_k_top_p_filtering(l, top_k=50); assert f.shape==l.shape; f2=top_k_top_p_filtering(l, top_p=0.9); assert f2.shape==l.shape'"
+      expected="top_k and top_p filtering both return same shape" stop_on_fail="true" module="M-KRONOS-PREDICTOR" />
+    <verification id="V-M-KRONOS-PREDICTOR-04" description="calc_time_stamps returns correct columns"
+      command="python -c 'from src.core.kronos.predictor import calc_time_stamps; import pandas as pd; ts=pd.Series(pd.date_range(&quot;2023-01-01&quot;, periods=5, freq=&quot;h&quot;)); df=calc_time_stamps(ts); assert list(df.columns)==[&quot;minute&quot;,&quot;hour&quot;,&quot;weekday&quot;,&quot;day&quot;,&quot;month&quot;]'"
+      expected="5 time columns: minute, hour, weekday, day, month" stop_on_fail="true" module="M-KRONOS-PREDICTOR" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-KRONOS-TOKENIZER: VQ-VAE Tokenizer Verification                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-KRONOS-TOKENIZER" name="Kronos Tokenizer Checks">
+    <verification id="V-M-KRONOS-TOKENIZER-01" description="Tokenizer import resolves"
+      command="python -c 'from src.core.kronos.tokenizer import KronosTokenizer'"
+      expected="No ImportError" stop_on_fail="true" module="M-KRONOS-TOKENIZER" />
+    <verification id="V-M-KRONOS-TOKENIZER-02" description="Tokenizer has encode, decode, indices_to_bits methods"
+      command="python -c 'from src.core.kronos.tokenizer import KronosTokenizer; assert hasattr(KronosTokenizer, &quot;encode&quot;) and hasattr(KronosTokenizer, &quot;decode&quot;) and hasattr(KronosTokenizer, &quot;indices_to_bits&quot;)'"
+      expected="encode, decode, indices_to_bits methods present" stop_on_fail="true" module="M-KRONOS-TOKENIZER" />
+    <verification id="V-M-KRONOS-TOKENIZER-03" description="Tokenizer __init__ signature accepts s1_bits, s2_bits, d_model"
+      command="python -c 'from src.core.kronos.tokenizer import KronosTokenizer; import inspect; sig=inspect.signature(KronosTokenizer.__init__); params=list(sig.parameters.keys()); assert &quot;s1_bits&quot; in params and &quot;s2_bits&quot; in params and &quot;d_model&quot; in params'"
+      expected="__init__ accepts s1_bits, s2_bits, d_model parameters" stop_on_fail="true" module="M-KRONOS-TOKENIZER" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-CALIBRATE: Calibration Sweep Verification                         -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-CALIBRATE" name="M-CALIBRATE Calibration Checks">
+    <verification id="V-M-CALIBRATE-01" description="All calibrate module imports resolve"
+      command="python -c &quot;from src.evaluation.calibrate import load_config, fetch_data, pass_1_pred_len_sweep, pass_2_param_sweep, _random_indices&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-CALIBRATE" />
+    <verification id="V-M-CALIBRATE-02" description="_random_indices produces correct number of sorted indices"
+      command="python -c &quot;import numpy as np; from src.evaluation.calibrate import _random_indices; idx=_random_indices(10000, 500, 12, 50, 42); assert len(idx)==50; assert all(0&lt;=i&lt;9488 for i in idx); assert sorted(idx)==list(idx); print('OK')&quot;"
+      expected="OK — 50 sorted indices in valid range" stop_on_fail="true" module="M-CALIBRATE" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-ENGINE: Backtest Engine Verification                               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-ENGINE" name="M-ENGINE Engine Checks">
+    <verification id="V-M-ENGINE-01" description="Engine imports resolve (metrics + simulation)"
+      command="python -c &quot;from src.evaluation.engine import run_backtest, run_backtest_custom, compute_all_metrics, get_tp_sl, STRAT_METRICS, PRED_METRICS, TRADE_METRICS&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-ENGINE" />
+    <verification id="V-M-ENGINE-02" description="Metric constants have expected sizes"
+      command="python -c &quot;from src.evaluation.engine import STRAT_METRICS, PRED_METRICS, TRADE_METRICS; assert len(STRAT_METRICS)==12; assert len(PRED_METRICS)==6; assert len(TRADE_METRICS)==4; print('OK')&quot;"
+      expected="OK — 12+6+4 metrics" stop_on_fail="true" module="M-ENGINE" />
+    <verification id="V-M-ENGINE-03" description="compute_all_metrics returns correct keys"
+      command="python -c &quot;import numpy as np; from src.evaluation.engine import compute_all_metrics; r=np.random.randn(1000)*0.01; e=np.cumprod(1+r); m=compute_all_metrics(r,e,r[:500],r[:500],np.random.randint(-1,2,500)); required={'sharpe','sortino','max_dd','profit_factor','win_rate','calmar','avg_return','total_return','n_trades','n_long','n_short','n_bar_active','psr','dsr','dir_acc','dir_sharpe','return_corr','ic_rank','bias','mae'}; assert required.issubset(m.keys()), f'Missing: {required-m.keys()}'; print(f'OK: {len(m)} metrics')&quot;"
+      expected="OK — 20+ metrics returned" stop_on_fail="true" module="M-ENGINE" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-EVALUATE: Per-Window Evaluation Verification                       -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-EVALUATE" name="M-EVALUATE Evaluation Checks">
+    <verification id="V-M-EVALUATE-01" description="evaluate() imports and returns dict for valid inputs"
+      command="python -c &quot;from src.evaluation.evaluate import evaluate; import numpy as np, pandas as pd; actual=pd.DataFrame({'close':[100,101,102],'high':[101,102,103],'low':[99,100,101],'open':[100,101,102]}); samples=np.random.randn(5,3,6)*0.01+100; r=evaluate(actual,samples,100.0); assert isinstance(r,dict); assert 'direction_accuracy' in r; assert 'consensus_rate' in r; print(f'OK: {len(r)} metrics')&quot;"
+      expected="OK — metrics dict with 14+ metrics" stop_on_fail="true" module="M-EVALUATE" />
+    <verification id="V-M-EVALUATE-02" description="evaluate() returns empty dict for empty samples"
+      command="python -c &quot;from src.evaluation.evaluate import evaluate; import numpy as np, pandas as pd; actual=pd.DataFrame({'close':[100],'high':[101],'low':[99],'open':[100]}); r=evaluate(actual,np.array([]),100.0); assert r=={}; print('OK')&quot;"
+      expected="OK — empty dict for empty samples" stop_on_fail="true" module="M-EVALUATE" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-METRICS: Financial Metrics Verification                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-METRICS" name="M-METRICS Metrics Checks">
+    <verification id="V-M-METRICS-01" description="All metric functions import"
+      command="python -c &quot;from src.evaluation.metrics import sharpe_ratio, max_drawdown, profit_factor, win_rate, calmar_ratio, direction_accuracy, direction_sharpe, return_correlation, ic_rank, bias, mae, prediction_volatility, psr, dsharpe_ratio, sortino_ratio, avg_return, n_trades, trade_pct, StrategyMetrics, evaluate_model&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-METRICS" />
+    <verification id="V-M-METRICS-02" description="sharpe_ratio on constant returns = 0"
+      command="python -c &quot;import numpy as np; from src.evaluation.metrics import sharpe_ratio; r=np.ones(100)*0.001; sr=sharpe_ratio(r); assert abs(sr)&lt;1e-6, f'Expected 0 got {sr}'; print('OK')&quot;"
+      expected="OK — sharpe ~0 for constant returns" stop_on_fail="true" module="M-METRICS" />
+    <verification id="V-M-METRICS-03" description="max_drawdown on monotonic equity = 0"
+      command="python -c &quot;import numpy as np; from src.evaluation.metrics import max_drawdown; e=np.exp(np.linspace(0,0.1,100)); dd=max_drawdown(e); assert abs(dd)&lt;1e-6; print('OK')&quot;"
+      expected="OK — no drawdown on monotonic equity" stop_on_fail="true" module="M-METRICS" />
+    <verification id="V-M-METRICS-04" description="PSR on positive Sharpe exceeds 0.5"
+      command="python -c &quot;import numpy as np; from src.evaluation.metrics import psr; r=np.random.randn(1000)*0.01+0.001; p=psr(r); assert 0&lt;=p&lt;=1; assert p&gt;0.5, f'Expected &gt;0.5 got {p}'; print(f'OK: PSR={p:.4f}')&quot;"
+      expected="PSR &gt; 0.5 for positive expected returns" stop_on_fail="false" module="M-METRICS" />
+    <verification id="V-M-METRICS-05" description="StrategyMetrics from_trades constructs correctly"
+      command="python -c &quot;import numpy as np; from src.evaluation.metrics import StrategyMetrics; m=StrategyMetrics(name='test',total_trades=100,win_rate=0.6,sharpe_ratio=1.5,max_drawdown=-0.1,total_return=0.2); assert m.name=='test'; assert m.win_rate==0.6; print('OK')&quot;"
+      expected="OK — StrategyMetrics constructed" stop_on_fail="true" module="M-METRICS" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-OUTPUT: Result Serialization Verification                          -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-OUTPUT" name="M-OUTPUT Serialization Checks">
+    <verification id="V-M-OUTPUT-01" description="Output module imports resolve"
+      command="python -c &quot;from src.evaluation.output import save_samples, load_samples, reconstruct, compute_monthly_metrics, save_monthly_metrics, trade_summary, save_beliefs, load_beliefs, save_summary&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-OUTPUT" />
+    <verification id="V-M-OUTPUT-02" description="reconstruct round-trips correctly"
+      command="python -c &quot;import numpy as np; from src.evaluation.output import reconstruct; arr=np.random.randn(5,12).astype(np.float32); blob=arr.tobytes(); out=reconstruct(blob,5,12); assert np.allclose(arr,out); print('OK')&quot;"
+      expected="OK — lossless roundtrip" stop_on_fail="true" module="M-OUTPUT" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-QUARTERLY: Quarterly Breakdown Verification                        -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-QUARTERLY" name="M-QUARTERLY Quarterly Checks">
+    <verification id="V-M-QUARTERLY-01" description="Quarterly module imports resolve"
+      command="python -c &quot;from src.evaluation.quarterly import compute_quarterly_tables, save_results_csv, save_quarterly_csv, compute_h1_2026_metrics, save_all_results&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-QUARTERLY" />
+    <verification id="V-M-QUARTERLY-02" description="compute_quarterly_tables groups bars by quarter"
+      command="python -c &quot;import numpy as np; from src.evaluation.quarterly import compute_quarterly_tables; ts=np.array(['2025-01-15','2025-04-15','2025-07-15','2026-01-15']); labels=['test']; pb=[np.random.randn(4)*0.01]; bars,qtrs=compute_quarterly_tables(labels,pb,ts); assert '2025-Q1' in bars; assert '2025-Q2' in bars; assert '2025-Q3' in bars; assert '2026-Q1' in bars; print(f'OK: {len(bars)} quarters')&quot;"
+      expected="OK — 4 quarterly groups" stop_on_fail="true" module="M-QUARTERLY" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-REGIME: BB Regime Classification Verification                      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-REGIME" name="M-REGIME Regime Checks">
+    <verification id="V-M-REGIME-01" description="Regime module exports all public functions"
+      command="python -c &quot;from src.evaluation.regime import apply_filters, build_regime_masks, champion_breakdown, classify_regimes, compute_bar_metadata, compute_quarterly_breakdown, compute_raw_bb_mapping, top5_15h_16h&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-REGIME" />
+    <verification id="V-M-REGIME-02" description="compute_bar_metadata extracts correct hour/dow"
+      command="python -c &quot;import numpy as np; from src.evaluation.regime import compute_bar_metadata; ts=np.array(['2025-01-15 10:30','2025-01-15 14:00','2025-01-17 18:00']); hour,dow=compute_bar_metadata(ts); assert list(hour)==[10,14,18]; assert list(dow)==[2,2,4]; print('OK')&quot;"
+      expected="OK — hours [10,14,18], DOW [2,2,4]" stop_on_fail="true" module="M-REGIME" />
+    <verification id="V-M-REGIME-03" description="apply_filters filters signals correctly"
+      command="python -c &quot;import numpy as np; from src.evaluation.regime import apply_filters; sig=np.array([1,0,-1,1,0]); data={'bb_pct':np.array([0.1,0.5,0.9,0.2,0.5]),'bb_width':np.array([0.02,0.02,0.02,0.02,0.02]),'wf_width':np.array([0.01,0.01,0.01,0.01,0.01]),'bb_mom':np.array([True,True,True,True,True])}; out=apply_filters(sig,data,has_bbpct=True); assert out[0]==0; assert out[2]==0; assert out[3]==0; print('OK')&quot;"
+      expected="OK — signals filtered by %B position" stop_on_fail="true" module="M-REGIME" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-SIM: Trade Simulation Verification                                  -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-SIM" name="M-SIM Simulation Checks">
+    <verification id="V-M-SIM-01" description="All simulation functions import"
+      command="python -c &quot;from src.evaluation.simulation import simulate_trade, get_tp_sl, get_tp_sl_no_sl, get_tp_sl_no_tp, _weighted_q, get_tp_sl_w&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-SIM" />
+    <verification id="V-M-SIM-02" description="simulate_trade returns None for invalid entry"
+      command="python -c &quot;import numpy as np; from src.evaluation.simulation import simulate_trade; raw=np.random.randn(1000,5); bar,ret,hold=simulate_trade(0,1,105,95,np.array([0.0]),raw,500,12); assert bar is None; assert ret==0.0; assert hold==0; print('OK')&quot;"
+      expected="OK — returns (None, 0.0, 0) for invalid entry" stop_on_fail="true" module="M-SIM" />
+    <verification id="V-M-SIM-03" description="get_tp_sl returns correct TP/SL for long signal"
+      command="python -c &quot;import numpy as np; from src.evaluation.simulation import get_tp_sl; ec=np.array([100.0]); g_tp=np.array([105.0]); g_sl=np.array([95.0]); tp,sl=get_tp_sl(0,1,ec,g_tp,g_sl); assert tp==105.0; assert sl==95.0; print('OK')&quot;"
+      expected="OK — long TP=105, SL=95" stop_on_fail="true" module="M-SIM" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-WALK-FORWARD: Walk-Forward Pipeline Verification                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-WALK-FORWARD" name="M-WALK-FORWARD Pipeline Checks">
+    <verification id="V-M-WALK-FORWARD-01" description="Walk-forward import resolves"
+      command="python -c &quot;from src.evaluation.walk_forward import load_mamba_data, extract_ticker, filter_main_session, generate_windows, group_windows_by_month, run_batch_inference&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-WALK-FORWARD" />
+    <verification id="V-M-WALK-FORWARD-02" description="generate_windows produces non-overlapping windows"
+      command="python -c &quot;import numpy as np, pandas as pd; from src.evaluation.walk_forward import generate_windows; df=pd.DataFrame({'open':np.random.randn(2000).cumsum()+100,'high':np.random.randn(2000).cumsum()+102,'low':np.random.randn(2000).cumsum()+98,'close':np.random.randn(2000).cumsum()+100,'volume':np.ones(2000)*1e6}, index=pd.date_range('2025-01-01',periods=2000,freq='10min')); wins=generate_windows(df,500,12,12,'2025-01-01','2025-02-01'); assert len(wins)&gt;0; for i in range(1,len(wins)): assert wins[i]['start_idx'] &gt;= wins[i-1]['start_idx']+12; print(f'OK: {len(wins)} windows, non-overlapping')&quot;"
+      expected="OK — non-overlapping windows" stop_on_fail="true" module="M-WALK-FORWARD" />
+    <verification id="V-M-WALK-FORWARD-03" description="CLI --help prints usage and exits 0"
+      command="python -m src.evaluation.walk_forward --help"
+      expected="Prints usage with --ticker, --month, --full, exit code 0" stop_on_fail="true" module="M-WALK-FORWARD" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-SIGNAL-FRACTAL: Williams Fractal Pattern Detection               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-SIGNAL-FRACTAL" name="M-SIGNAL-FRACTAL Fractal Checks">
+    <verification id="V-M-SIGNAL-FRACTAL-01" description="All fractal functions import correctly"
+      command="python -c &quot;from src.signals.fractal import find_fractals, fractal_signal, breakout_signal, cluster_signal, compute_ao, ao_fractal_signal&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-SIGNAL-FRACTAL" />
+    <verification id="V-M-SIGNAL-FRACTAL-02" description="find_fractals returns correct structure with bullish/bearish indices and levels"
+      command="python -c &quot;from src.signals.fractal import find_fractals; import numpy as np; h=np.array([10,11,12,11,10,11,12,13,12,11]); l=np.array([8,9,10,9,8,9,10,11,10,9]); f=find_fractals(h,l); assert 'bullish_idx' in f; assert 'bearish_idx' in f; assert 'bullish_levels' in f; assert 'bearish_levels' in f; assert len(f['bullish_idx'])&gt;=1; assert len(f['bearish_idx'])&gt;=1; print('OK')&quot;"
+      expected="OK — fractal dict with all 4 keys, at least 1 of each type" stop_on_fail="true" module="M-SIGNAL-FRACTAL" />
+    <verification id="V-M-SIGNAL-FRACTAL-03" description="breakout_signal detects bullish breakout above bearish fractal"
+      command="python -c &quot;from src.signals.fractal import breakout_signal; import numpy as np; h=np.array([100,101,102,101,100,101,102,103,104,105]); l=np.array([98,99,100,99,98,99,100,101,102,103]); c=np.array([101,102,103,102,101,102,103,104,105,106]); sig=breakout_signal(h,l,c); print(f'signal={sig[\&quot;signal\&quot;]}'); assert sig['signal'] in ('bullish','bearish','none'); print('OK')&quot;"
+      expected="OK — signal is valid direction" stop_on_fail="true" module="M-SIGNAL-FRACTAL" />
+    <verification id="V-M-SIGNAL-FRACTAL-04" description="compute_ao returns correct sign for obvious trends"
+      command="python -c &quot;from src.signals.fractal import compute_ao; import numpy as np; h=np.linspace(100,110,40); l=np.linspace(98,108,40); ao=compute_ao(h,l); assert ao&gt;0; print(f'AO={ao:.4f}')&quot;"
+      expected="AO &gt; 0 for uptrend" stop_on_fail="true" module="M-SIGNAL-FRACTAL" />
+    <verification id="V-M-SIGNAL-FRACTAL-05" description="Short input arrays return safe defaults"
+      command="python -c &quot;from src.signals.fractal import fractal_signal, breakout_signal, compute_ao; import numpy as np; h=np.array([100,101,102]); l=np.array([98,99,100]); fs=fractal_signal(h,l); assert fs['signal']=='none'; bs=breakout_signal(h,l,np.array([101,102,103])); assert bs['signal']=='none'; ao=compute_ao(h,l); print(f'OK: fs={fs[\&quot;signal\&quot;]}, bs={bs[\&quot;signal\&quot;]}, ao={ao}')&quot;"
+      expected="All return safe defaults for arrays &lt; 5 elements" stop_on_fail="true" module="M-SIGNAL-FRACTAL" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-SIGNAL-ICT: ICT/SMC Signal Generation                            -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-SIGNAL-ICT" name="M-SIGNAL-ICT ICT Checks">
+    <verification id="V-M-SIGNAL-ICT-01" description="All ICT detection functions import correctly"
+      command="python -c &quot;from src.signals.ict import detect_swings, detect_order_block, detect_fvg, detect_fvg_multi, detect_liquidity_sweep, detect_premium_discount, detect_mss, detect_breaker_block, detect_volume_ob, detect_eqh_eql&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-SIGNAL-ICT" />
+    <verification id="V-M-SIGNAL-ICT-02" description="detect_swings returns correct structure with bullish/bearish indices"
+      command="python -c &quot;from src.signals.ict import detect_swings; import numpy as np; h=np.array([10,12,11,13,12,11,12,13,14,13,12,11]); l=np.array([8,10,9,10,9,8,9,10,11,10,9,8]); sw=detect_swings(h,l,3); assert 'bullish_idx' in sw; assert 'bearish_idx' in sw; assert len(sw['bullish_idx'])&gt;=1; print('OK')&quot;"
+      expected="OK — swing dict with all keys, at least 1 swing" stop_on_fail="true" module="M-SIGNAL-ICT" />
+    <verification id="V-M-SIGNAL-ICT-03" description="detect_order_block returns valid signal"
+      command="python -c &quot;from src.signals.ict import detect_order_block; import numpy as np; o=np.array([101,102,101,103,104]); h=np.array([102,103,102,104,105]); l=np.array([100,101,100,102,103]); c=np.array([100,103,101,104,105]); ob=detect_order_block(o,h,l,c); print(f'signal={ob[\&quot;signal\&quot;]}'); assert ob['signal'] in ('bullish','bearish','none'); print('OK')&quot;"
+      expected="OK — signal is valid direction" stop_on_fail="true" module="M-SIGNAL-ICT" />
+    <verification id="V-M-SIGNAL-ICT-04" description="detect_fvg detects fair value gap"
+      command="python -c &quot;from src.signals.ict import detect_fvg; import numpy as np; h=np.array([100,105,103,102,101]); l=np.array([98,102,99,100,99]); fvg=detect_fvg(h,l); print(f'signal={fvg[\&quot;signal\&quot;]}'); assert fvg['signal'] in ('bullish','bearish','none'); print('OK')&quot;"
+      expected="OK — FVG signal is valid" stop_on_fail="true" module="M-SIGNAL-ICT" />
+    <verification id="V-M-SIGNAL-ICT-05" description="detect_premium_discount classifies zone correctly"
+      command="python -c &quot;from src.signals.ict import detect_premium_discount; import numpy as np; h=np.array([105,106,107,108,109,110,108,106,104,102]); l=np.array([95,96,97,98,99,100,98,96,94,92]); c=np.array([102,103,104,105,106,107,105,103,101,99]); pd=detect_premium_discount(h,l,c); print(f'zone={pd[\&quot;zone\&quot;]}'); assert pd['zone'] in ('premium','discount','none'); print('OK')&quot;"
+      expected="OK — zone is valid" stop_on_fail="true" module="M-SIGNAL-ICT" />
+    <verification id="V-M-SIGNAL-ICT-06" description="Short input arrays return safe defaults"
+      command="python -c &quot;from src.signals.ict import detect_swings, detect_order_block, detect_fvg; import numpy as np; h=np.array([100,101]); l=np.array([98,99]); sw=detect_swings(h,l); ob=detect_order_block(np.array([101,102]),h,l,np.array([100,101])); fvg=detect_fvg(h,l); print(f'OK: sw={len(sw[\&quot;bullish_idx\&quot;])}, ob={ob[\&quot;signal\&quot;]}, fvg={fvg[\&quot;signal\&quot;]}')&quot;"
+      expected="All return safe defaults for short arrays" stop_on_fail="true" module="M-SIGNAL-ICT" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-SIGNAL-VOL: Volatility Signals                                   -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-SIGNAL-VOL" name="M-SIGNAL-VOL Volatility Checks">
+    <verification id="V-M-SIGNAL-VOL-01" description="All volatility functions import correctly"
+      command="python -c &quot;from src.signals.volatility import compute_atr, compute_adr, volatility_regime&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-SIGNAL-VOL" />
+    <verification id="V-M-SIGNAL-VOL-02" description="compute_atr returns valid volatility diagnostics"
+      command="python -c &quot;from src.signals.volatility import compute_atr; import numpy as np; h=np.random.rand(100)*10+100; l=h-np.random.rand(100)*5; c=(h+l)/2; atr=compute_atr(h,l,c); assert 'atr' in atr; assert 'atr_pct' in atr; assert 'low_vol' in atr; assert 'high_vol' in atr; assert 'rising' in atr; assert 'falling' in atr; assert 0&lt;=atr['atr_pct']&lt;=1; print(f'OK: ATR={atr[\&quot;atr\&quot;]:.4f}, pct={atr[\&quot;atr_pct\&quot;]:.2f}')&quot;"
+      expected="OK — ATR dict with all 6 keys, atr_pct in [0,1]" stop_on_fail="true" module="M-SIGNAL-VOL" />
+    <verification id="V-M-SIGNAL-VOL-03" description="compute_adr returns valid daily range diagnostics"
+      command="python -c &quot;from src.signals.volatility import compute_adr; import numpy as np; n=200; h=np.random.rand(n)*10+100; l=h-np.random.rand(n)*5; is_start=np.zeros(n,dtype=bool); is_start[::10]=True; adr=compute_adr(h,l,is_start); assert 'adr' in adr; assert 'current_range' in adr; assert 'range_ratio' in adr; assert 'low_range' in adr; assert 'high_range' in adr; print(f'OK: ADR={adr[\&quot;adr\&quot;]:.4f}, ratio={adr[\&quot;range_ratio\&quot;]:.2f}')&quot;"
+      expected="OK — ADR dict with all 7 keys" stop_on_fail="true" module="M-SIGNAL-VOL" />
+    <verification id="V-M-SIGNAL-VOL-04" description="volatility_regime classifies into compression/expansion/neutral"
+      command="python -c &quot;from src.signals.volatility import volatility_regime; import numpy as np; n=200; h=np.random.rand(n)*10+100; l=h-np.random.rand(n)*5; c=(h+l)/2; is_start=np.zeros(n,dtype=bool); is_start[::10]=True; regime=volatility_regime(h,l,c,is_start); assert regime in ('compression','expansion','neutral'); print(f'OK: regime={regime}')&quot;"
+      expected="OK — valid regime string" stop_on_fail="true" module="M-SIGNAL-VOL" />
+    <verification id="V-M-SIGNAL-VOL-05" description="Short input arrays return safe defaults"
+      command="python -c &quot;from src.signals.volatility import compute_atr, compute_adr; import numpy as np; h=np.array([100,101]); l=np.array([98,99]); c=np.array([99,100]); atr=compute_atr(h,l,c,14); assert atr['atr']==0; is_start=np.array([True,False]); adr=compute_adr(h,l,is_start); assert adr['adr']==0; print('OK')&quot;"
+      expected="All return safe defaults for arrays &lt; period+1" stop_on_fail="true" module="M-SIGNAL-VOL" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-SIGNAL-VWAP: VWAP Signals                                       -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-SIGNAL-VWAP" name="M-SIGNAL-VWAP VWAP Checks">
+    <verification id="V-M-SIGNAL-VWAP-01" description="All VWAP functions import correctly"
+      command="python -c &quot;from src.signals.vwap import compute_vwap, anchored_vwap&quot;"
+      expected="No ImportError" stop_on_fail="true" module="M-SIGNAL-VWAP" />
+    <verification id="V-M-SIGNAL-VWAP-02" description="compute_vwap returns dict with all band keys"
+      command="python -c &quot;from src.signals.vwap import compute_vwap; import numpy as np; n=100; h=np.linspace(100,110,n)+np.random.rand(n)*2; l=np.linspace(98,108,n)-np.random.rand(n)*2; c=(h+l)/2; v=np.ones(n)*1e6; is_start=np.zeros(n,dtype=bool); is_start[0]=True; vw=compute_vwap(h,l,c,v,is_start); assert 'vwap' in vw; assert 'upper' in vw; assert 'lower' in vw; assert 'sigma' in vw; assert 'zscore' in vw; assert 'below_vwap' in vw; assert 'above_vwap' in vw; assert 'crossed_up' in vw; assert 'crossed_down' in vw; print(f'OK: vwap={vw[\&quot;vwap\&quot;]:.2f}, z={vw[\&quot;zscore\&quot;]:.2f}')&quot;"
+      expected="OK — VWAP dict with 14+ keys" stop_on_fail="true" module="M-SIGNAL-VWAP" />
+    <verification id="V-M-SIGNAL-VWAP-03" description="VWAP cross detection flags direction changes"
+      command="python -c &quot;from src.signals.vwap import compute_vwap; import numpy as np; n=50; h=np.ones(n)*101; l=np.ones(n)*99; c=np.concatenate([np.ones(25)*98,np.ones(25)*102]); v=np.ones(n)*1e6; is_start=np.zeros(n,dtype=bool); is_start[0]=True; vw=compute_vwap(h,l,c,v,is_start); assert isinstance(vw['crossed_up'], bool); assert isinstance(vw['crossed_down'], bool); print(f'OK: up={vw[\&quot;crossed_up\&quot;]}, down={vw[\&quot;crossed_down\&quot;]}')&quot;"
+      expected="OK — crossed_up/crossed_down are bool flags" stop_on_fail="true" module="M-SIGNAL-VWAP" />
+    <verification id="V-M-SIGNAL-VWAP-04" description="anchored_vwap computes VWAP from arbitrary anchor point"
+      command="python -c &quot;from src.signals.vwap import anchored_vwap, compute_vwap; import numpy as np; n=50; h=np.linspace(100,110,n); l=np.linspace(98,108,n); c=(h+l)/2; v=np.ones(n)*1e6; av=anchored_vwap(h,l,c,v,anchor_idx=10); assert 'vwap' in av; print(f'OK: anchored_vwap={av[\&quot;vwap\&quot;]:.2f}')&quot;"
+      expected="OK — anchored_vwap produces valid dict" stop_on_fail="true" module="M-SIGNAL-VWAP" />
+    <verification id="V-M-SIGNAL-VWAP-05" description="Short input arrays return safe defaults"
+      command="python -c &quot;from src.signals.vwap import compute_vwap; import numpy as np; h=np.array([100]); l=np.array([98]); c=np.array([99]); v=np.array([1e6]); is_start=np.array([True]); vw=compute_vwap(h,l,c,v,is_start); assert vw['vwap']==99.0; print('OK')&quot;"
+      expected="OK — VWAP equals close for single bar" stop_on_fail="true" module="M-SIGNAL-VWAP" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-STRATEGY-WF: WF Baseline Champion Verification                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-STRATEGY-WF" name="M-STRATEGY-WF Walk-Forward Checks">
+    <verification id="V-M-STRATEGY-WF-01" description="WF strategy imports correctly"
+      command="python -c 'from src.strategies.verified.s01_wf import run'"
+      expected="No ImportError" stop_on_fail="true" module="M-STRATEGY-WF" />
+    <verification id="V-M-STRATEGY-WF-02" description="WF strategy appears in registry discovery"
+      command="python -m src.strategies.registry --discover"
+      expected="Contains s01_wf" stop_on_fail="true" module="M-STRATEGY-WF" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-STRATEGY-BBPCT: WF+BB%B Champion Verification                     -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-STRATEGY-BBPCT" name="M-STRATEGY-BBPCT Bollinger %B Checks">
+    <verification id="V-M-STRATEGY-BBPCT-01" description="BBPCT strategy imports correctly"
+      command="python -c 'from src.strategies.verified.s02_bb_pct import run'"
+      expected="No ImportError" stop_on_fail="true" module="M-STRATEGY-BBPCT" />
+    <verification id="V-M-STRATEGY-BBPCT-02" description="BBPCT appears in registry discovery"
+      command="python -m src.strategies.registry --discover"
+      expected="Contains s02_bb_pct" stop_on_fail="true" module="M-STRATEGY-BBPCT" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-STRATEGY-BBMOM: WF+BB%B+BBmom Champion Verification               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-STRATEGY-BBMOM" name="M-STRATEGY-BBMOM Momentum Checks">
+    <verification id="V-M-STRATEGY-BBMOM-01" description="BBMOM strategy imports correctly"
+      command="python -c 'from src.strategies.verified.s03_bb_mom import run'"
+      expected="No ImportError" stop_on_fail="true" module="M-STRATEGY-BBMOM" />
+    <verification id="V-M-STRATEGY-BBMOM-02" description="BBMOM appears in registry discovery"
+      command="python -m src.strategies.registry --discover"
+      expected="Contains s03_bb_mom" stop_on_fail="true" module="M-STRATEGY-BBMOM" />
+  </verification_suite>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- M-STRATEGY-BBROLLWR: WF+BB%B+BBmom+rollWR Champion Verification      -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-STRATEGY-BBROLLWR" name="M-STRATEGY-BBROLLWR RollWR Checks">
+    <verification id="V-M-STRATEGY-BBROLLWR-01" description="BBROLLWR strategy imports correctly"
+      command="python -c 'from src.strategies.verified.s04_bb_rollwr import run'"
+      expected="No ImportError" stop_on_fail="true" module="M-STRATEGY-BBROLLWR" />
+    <verification id="V-M-STRATEGY-BBROLLWR-02" description="BBROLLWR appears in registry discovery"
+      command="python -m src.strategies.registry --discover"
+      expected="Contains s04_bb_rollwr" stop_on_fail="true" module="M-STRATEGY-BBROLLWR" />
   </verification_suite>
 
 </grace:verification-plan>

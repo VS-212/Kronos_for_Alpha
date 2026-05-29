@@ -113,6 +113,34 @@ grep "GRACE"         → docs/                                (GRACE XML artifac
 | M-REGISTRY | src/strategies/registry.py | ✅ ready |
 | M-CLI-BT | src/cli/backtest.py | ✅ ready |
 | M-CLI-CMP | src/cli/compare.py | ✅ ready |
+| M-KRONOS-MODEL | src/core/kronos/model.py | ✅ ready |
+| M-KRONOS-MODULES | src/core/kronos/modules.py | ✅ ready |
+| M-KRONOS-TOKENIZER | src/core/kronos/tokenizer.py | ✅ ready |
+| M-KRONOS-PREDICTOR | src/core/kronos/predictor.py | ✅ ready |
+| M-KRONOS-REGISTRY | src/core/registry.py | ✅ ready |
+| M-DATA-BASE | src/data/base.py | ✅ ready |
+| M-DATA-CACHE | src/data/cache.py | ✅ ready |
+| M-EVALUATE | src/evaluation/evaluate.py | ✅ ready |
+| M-OUTPUT | src/evaluation/output.py | ✅ ready |
+| M-WALK-FORWARD | src/evaluation/walk_forward.py | ✅ ready |
+| M-SIGNAL-ATOMS | src/signals/atoms.py | ✅ ready |
+| M-SIGNAL-BARS | src/signals/bars.py | ✅ ready |
+| M-SIGNAL-BOLLINGER | src/signals/bollinger.py | ✅ ready |
+| M-SIGNAL-DIV | src/signals/divergence.py | ✅ ready |
+| M-SIGNAL-FRACTAL | src/signals/fractal.py | ✅ ready |
+| M-SIGNAL-ICT | src/signals/ict.py | ✅ ready |
+| M-SIGNAL-VOL | src/signals/volatility.py | ✅ ready |
+| M-SIGNAL-VWAP | src/signals/vwap.py | ✅ ready |
+| M-STRATEGY-CORE | src/strategies/pending/core.py | ✅ ready |
+| M-STRATEGY-VANILLA | src/strategies/pending/vanilla.py | ✅ ready |
+| M-STRATEGY-S01 | src/strategies/pending/s01_bb.py | ✅ ready |
+| M-STRATEGY-S02 | src/strategies/pending/s02_bb_mr.py | ✅ ready |
+| M-STRATEGY-S05 | src/strategies/pending/s05_bb_breakout.py | ✅ ready |
+| M-STRATEGY-S20 | src/strategies/pending/s20_ob.py | ✅ ready |
+| M-STRATEGY-S28 | src/strategies/pending/s28_vol_ob.py | ⚠️ failed-may2026 |
+| M-STRATEGY-S34 | src/strategies/pending/s34_vwap_ob.py | ⚠️ failed-may2026 |
+| M-STRATEGY-S38 | src/strategies/pending/s38_lowvol_ob.py | ✅ ready |
+| M-DATA-MOEX | src/data/moex.py | ❌ future |
 
 ## Directory
 
