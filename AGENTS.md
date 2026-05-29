@@ -111,6 +111,8 @@ grep "GRACE"         → docs/                                (GRACE XML artifac
 | M-STRATEGY-BBMOM | src/strategies/verified/s03_bb_mom.py | ✅ ready |
 | M-STRATEGY-BBROLLWR | src/strategies/verified/s04_bb_rollwr.py | ✅ ready |
 | M-REGISTRY | src/strategies/registry.py | ✅ ready |
+| M-CLI-BT | src/cli/backtest.py | ✅ ready |
+| M-CLI-CMP | src/cli/compare.py | ✅ ready |
 
 ## Directory
 
@@ -211,6 +213,8 @@ M-REGIME     src/evaluation/regime.py         BB regime + temporal analysis
 | `python -m src.strategies.registry --stats` | M-REGISTRY | ✅ ready |
 | `python -m src.strategies.registry --discover` | M-REGISTRY | ✅ ready |
 | `python -m src.strategies.registry --import-csv PATH` | M-REGISTRY | ✅ ready |
+| `python -m src.cli.backtest --strategy wf --name my-test --pl 12` | M-CLI-BT | ✅ ready |
+| `python -m src.cli.compare --ref "WF+BB%B+BBmom+rollWR noTP" --test signals.npy` | M-CLI-CMP | ✅ ready |
 | _rest_ | M-* | ❌ future |
 
 ## Docs (read by situation)

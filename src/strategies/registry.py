@@ -132,6 +132,32 @@ def import_from_csv(path, output_path=None):
     return count
 
 
+def add_strategy(entry, path=None):
+    """Append or update a single strategy entry in the registry.
+
+    entry: dict with keys:
+        name: str  (required, unique key)
+        asset: str
+        status: str (default 'manual')
+        params: dict
+        metrics: dict of metric_name -> float
+    """
+    registry = _load(path)
+    if "strategies" not in registry:
+        registry["strategies"] = {}
+    name = entry["name"]
+    existing = registry["strategies"].get(name, {})
+    entry.setdefault("asset", existing.get("asset"))
+    entry.setdefault("status", existing.get("status", "manual"))
+    entry.setdefault("params", existing.get("params", {}))
+    entry.setdefault("id", existing.get("id"))
+    entry.setdefault("code_path", existing.get("code_path"))
+    entry.setdefault("data_source", existing.get("data_source"))
+    registry["strategies"][name] = entry
+    _save(registry, path)
+    return name
+
+
 def export_registry(input_path=None, output_path=None):
     registry = _load(input_path)
     out = output_path or (input_path or REGISTRY_PATH)

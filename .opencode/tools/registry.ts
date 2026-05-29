@@ -40,3 +40,34 @@ export const discover = tool({
     return (await Bun.$`python3 -m src.strategies.registry --discover`.text()).trim()
   },
 })
+
+export const backtest = tool({
+  description: "Run a single SBER backtest with custom parameters. Use when user wants to test a strategy with different PL, TP/SL, commission or compare against registry champions.",
+  args: {
+    name: tool.schema.string().describe("Strategy name for output and optional registry registration"),
+    strategy: tool.schema.string().default("wf").describe("Signal source: 'wf' for built-in walk-forward, or path to signals.npy"),
+    pl: tool.schema.number().default(12).describe("Profit horizon in bars (default 12)"),
+    lk: tool.schema.number().default(500).describe("Lookback window size (default 500)"),
+    comm: tool.schema.number().default(0.0).describe("Commission per trade (default 0.0)"),
+    tpSl: tool.schema.string().default("default").describe("TP/SL mode: 'default', 'no_tp', or 'no_sl'"),
+    register: tool.schema.boolean().default(false).describe("Append result to registry.json"),
+  },
+  async execute(args) {
+    let cmd = `python3 -m src.cli.backtest --strategy ${args.strategy} --name "${args.name}" --pl ${args.pl} --lk ${args.lk} --comm ${args.comm} --tp-sl ${args.tpSl} --json`
+    if (args.register) cmd += " --register"
+    return (await Bun.$`${cmd}`.text()).trim()
+  },
+})
+
+export const compare = tool({
+  description: "Compare two SBER backtest strategies side-by-side. Use when user wants to A/B test a new strategy against a reference champion or another signal.",
+  args: {
+    ref: tool.schema.string().describe("Reference: strategy name from registry or path to signals.npy"),
+    test: tool.schema.string().describe("Test: strategy name from registry or path to signals.npy"),
+    pl: tool.schema.number().default(12).describe("Profit horizon in bars"),
+    tpSl: tool.schema.string().default("default").describe("TP/SL mode: 'default', 'no_tp', 'no_sl'"),
+  },
+  async execute(args) {
+    return (await Bun.$`python3 -m src.cli.compare --ref "${args.ref}" --test "${args.test}" --pl ${args.pl} --tp-sl ${args.tpSl}`.text()).trim()
+  },
+})

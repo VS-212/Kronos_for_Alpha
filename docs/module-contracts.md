@@ -283,10 +283,36 @@ Status: ✅ ready
 |------|----------|
 | Purpose | Unified strategy registry — lookup, import, export metrics per strategy/asset |
 | Input | `registry.json` (definitions + instances), CSV (for import) |
-| Output | Python API (list, lookup, import_csv, export, discover) + CLI |
-| Functions | `list_strategies()`, `lookup_strategy()`, `import_from_csv()`, `export_registry()`, `discover_verified()` |
+| Output | Python API (list, lookup, import_csv, export, discover, add_strategy) + CLI |
+| Functions | `list_strategies()`, `lookup_strategy()`, `import_from_csv()`, `export_registry()`, `discover_verified()`, `add_strategy()` |
 | CLI | `python -m src.strategies.registry --top N --asset X`, `--lookup NAME`, `--import-csv PATH`, `--stats` |
 | Guarantees | Idempotent import, single-file truth, machine-readable JSON output |
+
+### M-CLI-BT: SBER Backtest Runner
+
+File: `src/cli/backtest.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Run a single SBER backtest with custom parameters (PL, LK, TP/SL, commission) |
+| Input | Signal array (.npy) or built-in WF strategy; `load_sber_data()` |
+| Output | Metrics dict (JSON stdout) + optional append to registry.json |
+| CLI | `python -m src.cli.backtest --strategy wf --name my-test --pl 12 --tp-sl default` |
+| Guarantees | Reproducible (same params → same metrics), JSON machine-readable, --register appends to registry |
+
+### M-CLI-CMP: Strategy Compare
+
+File: `src/cli/compare.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Side-by-side comparison of two strategies (registry name or signals.npy) |
+| Input | Two strategy references (registry names or .npy paths), optional PL/TP/SL override |
+| Output | Table (stdout) or JSON with both metrics dicts |
+| CLI | `python -m src.cli.compare --ref "WF+BB%B+BBmom+rollWR noTP" --test signals.npy` |
+| Guarantees | Delta column for every metric, works with registry names and raw .npy |
 
 ---
 
