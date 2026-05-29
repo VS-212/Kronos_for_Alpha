@@ -311,7 +311,7 @@ BB_FILTERS = [
 ]
 
 for base_name, base_sig in base_signals.items():
-    for bb_label, _bb_check in BB_FILTERS:
+    for bb_label, bb_check in BB_FILTERS:
         sig = np.zeros(N, dtype=int)
         for i in range(N):
             if base_sig[i] == 0:
@@ -879,8 +879,8 @@ if idx >= 0:
 
         q0 = compute_quarterly(pb0)
         q1 = compute_quarterly(pb1)
-        n0d = {k: v for k, *v in [row for row in q0]}
-        n1d = {k: v for k, *v in [row for row in q1]}
+        n0d = {k: v for k, *v in q0}
+        n1d = {k: v for k, *v in q1}
 
         print(f"\n  ┌─ {label}")
         print(f"  │ {'Quarter':<12} {'AverRet bef':>10} {'AverRet aft':>10} {'Δ AverRet':>10}   {'PF bef':>8} {'PF aft':>8} {'Δ PF':>8}   {'WR bef':>7} {'WR aft':>7} {'Δ WR':>7}")

@@ -110,6 +110,7 @@ grep "GRACE"         → docs/                                (GRACE XML artifac
 | M-STRATEGY-BBPCT | src/strategies/verified/s02_bb_pct.py | ✅ ready |
 | M-STRATEGY-BBMOM | src/strategies/verified/s03_bb_mom.py | ✅ ready |
 | M-STRATEGY-BBROLLWR | src/strategies/verified/s04_bb_rollwr.py | ✅ ready |
+| M-REGISTRY | src/strategies/registry.py | ✅ ready |
 
 ## Directory
 
@@ -205,6 +206,11 @@ M-REGIME     src/evaluation/regime.py         BB regime + temporal analysis
 | `python scripts/align_predictions.py --tf10-preds ... --tf1h-preds ...` | M-PREDICT | ✅ ready |
 | `python templates/scripts/run_sber.py` | M-ENGINE | ✅ ready |
 | `python templates/scripts/backtest_sber_v2.py` | M-ENGINE | ✅ ready |
+| `python -m src.strategies.registry --top 10 --asset SBER` | M-REGISTRY | ✅ ready |
+| `python -m src.strategies.registry --lookup "rollWR"` | M-REGISTRY | ✅ ready |
+| `python -m src.strategies.registry --stats` | M-REGISTRY | ✅ ready |
+| `python -m src.strategies.registry --discover` | M-REGISTRY | ✅ ready |
+| `python -m src.strategies.registry --import-csv PATH` | M-REGISTRY | ✅ ready |
 | _rest_ | M-* | ❌ future |
 
 ## Docs (read by situation)

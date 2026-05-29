@@ -74,6 +74,7 @@
     <node id="M-STRATEGY-BBPCT"   name="WF+BB%B Champion (Sharpe 19.70)"      file="src/strategies/verified/s02_bb_pct.py" category="strategy"   status="✅ ready"     phase="2+" />
     <node id="M-STRATEGY-BBMOM"   name="WF+BB%B+BBmom Champion (Sharpe 22.91)" file="src/strategies/verified/s03_bb_mom.py" category="strategy"   status="✅ ready"     phase="2+" />
     <node id="M-STRATEGY-BBROLLWR" name="WF+BB%B+BBmom+rollWR Champion (Sharpe 23.51)" file="src/strategies/verified/s04_bb_rollwr.py" category="strategy" status="✅ ready" phase="2+" />
+    <node id="M-REGISTRY" name="Strategy Registry" file="src/strategies/registry.py" category="strategy" status="✅ ready" phase="2+" />
   </nodes>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -195,6 +196,13 @@
     <edge source="M-STRATEGY-BBMOM" target="M-ENGINE"       relation="uses" />
     <edge source="M-STRATEGY-BBROLLWR" target="M-FILTERS"   relation="uses" />
     <edge source="M-STRATEGY-BBROLLWR" target="M-ENGINE"    relation="uses" />
+    <edge source="M-REGISTRY"          target="M-ENGINE"    relation="reads_metrics_from" />
+    <edge source="M-REGISTRY"          target="M-METRICS"   relation="references" />
+    <edge source="M-REGISTRY"          target="M-CONFIG"    relation="reads" />
+    <edge source="M-STRATEGY-WF"       target="M-REGISTRY"  relation="registered_in" />
+    <edge source="M-STRATEGY-BBPCT"    target="M-REGISTRY"  relation="registered_in" />
+    <edge source="M-STRATEGY-BBMOM"    target="M-REGISTRY"  relation="registered_in" />
+    <edge source="M-STRATEGY-BBROLLWR" target="M-REGISTRY"  relation="registered_in" />
 
     <!-- ── Generic: all modules read config ── -->
     <edge source="M-KRONOS-TOKENIZER" target="M-CONFIG"          relation="reads_config" />

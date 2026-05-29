@@ -274,4 +274,20 @@ Status: ✅ ready
 
 ---
 
+### M-REGISTRY: Unified Strategy Registry
+
+File: `src/strategies/registry.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Unified strategy registry — lookup, import, export metrics per strategy/asset |
+| Input | `registry.json` (definitions + instances), CSV (for import) |
+| Output | Python API (list, lookup, import_csv, export, discover) + CLI |
+| Functions | `list_strategies()`, `lookup_strategy()`, `import_from_csv()`, `export_registry()`, `discover_verified()` |
+| CLI | `python -m src.strategies.registry --top N --asset X`, `--lookup NAME`, `--import-csv PATH`, `--stats` |
+| Guarantees | Idempotent import, single-file truth, machine-readable JSON output |
+
+---
+
 *Ported from kronos-alpha/docs/module-contracts.md. Revision: 1.1.*

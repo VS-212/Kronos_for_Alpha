@@ -161,4 +161,25 @@
     <verification id="V-DATA-05" description="Amount column computed: close * volume * lot_size (per ticker)" command="python -c \"from config import load_global_yaml; cfg=load_global_yaml(); lots=cfg['lot_sizes']; for ticker,lot in lots.items(): df=pd.read_parquet(f'data/v3/raw/{ticker}.parquet'); expected=df['close']*df['volume']*lot; assert (abs(df['amount']-expected).mean() < 1.0) if 'amount' in df.columns else True\"" expected="Amount column = close * volume * lot_size within tolerance" stop_on_fail="false" module="M-FETCH" />
   </verification_suite>
 
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- REGISTRY VERIFICATION                                                -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <verification_suite id="V-M-REGISTRY" name="Registry Integrity Checks">
+    <verification id="V-M-REGISTRY-01" description="Registry loads without errors"
+      command="python -m src.strategies.registry --top 5"
+      expected="JSON table with 5 strategies" stop_on_fail="true" module="M-REGISTRY" />
+    <verification id="V-M-REGISTRY-02" description="Import CSV matches expected count"
+      command="python -m src.strategies.registry --stats"
+      expected="107 strategies" stop_on_fail="true" module="M-REGISTRY" />
+    <verification id="V-M-REGISTRY-03" description="Lookup finds champion strategy"
+      command="python -m src.strategies.registry --lookup 'WF+BB%B+BBmom+rollWR noTP'"
+      expected="sharpe=23.51, win_rate=69.24%" stop_on_fail="true" module="M-REGISTRY" />
+    <verification id="V-M-REGISTRY-04" description="Discover verified strategies"
+      command="python -m src.strategies.registry --discover"
+      expected="4 verified strategies found (s01_wf..s04_bb_rollwr)" stop_on_fail="true" module="M-REGISTRY" />
+    <verification id="V-M-REGISTRY-05" description="Export registry to JSON"
+      command="python -m src.strategies.registry --export-json"
+      expected="Exported registry to ..." stop_on_fail="false" module="M-REGISTRY" />
+  </verification_suite>
+
 </grace:verification-plan>

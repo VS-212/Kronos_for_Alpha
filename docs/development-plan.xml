@@ -152,6 +152,12 @@
     <module id="M-INFRA" name="Infrastructure (Modal GPU)" file="scripts/modal_inference.py" phase="all" status="✅ ready" contract="Modal cloud config, Docker images, volume provisioning, inference jobs (T4/A100)" cli="modal run scripts/modal_inference.py::{seed,infer_10min,infer_10min_small,infer_10min_a100}" depends_on="" guarantees="" />
 
     <module id="M-CI" name="CI/CD Pipeline" file=".github/workflows/" phase="all" status="❌ future" contract="Lint, typecheck, test, grace lint on push" cli="N/A" depends_on="" guarantees="" />
+
+    <module id="M-REGISTRY" name="Strategy Registry" file="src/strategies/registry.py" phase="2+" status="✅ ready"
+      contract="registry.json ↔ Python API → JSON output; CLI: --top, --lookup, --import-csv, --stats"
+      cli="python -m src.strategies.registry --top 10 --asset SBER"
+      depends_on="M-ENGINE,M-METRICS"
+      guarantees="Idempotent import, single-file truth, machine-readable JSON output" />
   </modules>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -234,5 +240,6 @@
     <M-STRATEGY-BBPCT></M-STRATEGY-BBPCT>
     <M-STRATEGY-BBMOM></M-STRATEGY-BBMOM>
     <M-STRATEGY-BBROLLWR></M-STRATEGY-BBROLLWR>
+    <M-REGISTRY></M-REGISTRY>
   </module-registry>
 </grace:development-plan>
