@@ -112,19 +112,24 @@ Status: ❌ future
 ### M-PREDICT: Autoregressive Inference
 
 File: `src/core/kronos/predictor.py`
-Status: ✅ ready
+Status: ✅ ready (enhanced)
 
 | Поле | Значение |
 |------|----------|
-| Purpose | Generate pred_len=6 bars autoregressively (T=0.6, top_p=0.9, MC=4) → decode to OHLCV |
-| Input | `data/v3/processed/{ticker}_{split}.npy` (context: last 506 bars) + `kronos_moex_best.pt` + `KronosTokenizer-2k` |
-| Output | `data/v3/predictions/{ticker}_{split}.npy` × (21 × 3) + `manifest.json` |
-| Manifest keys | `ticker → {split: {shape=(T, 6), sample_count}}` |
-| Guarantees | Deterministic seed per MC path (reproducible), T4 GPU (inference < 0.5 GB VRAM) |
+| Purpose | Generate pred_len bars autoregressively (T=0.6, top_p=0.9, MC=5) → decode to OHLCV + belief state |
+| Input | `data/v3/processed/{ticker}_{split}.npy` (context: last N bars) + `kronos_moex_best.pt` + `KronosTokenizer` |
+| Output | `data/v3/predictions/{ticker}_{split}.npy` + `belief/{ticker}_belief_{split}.npy` + `manifest.json` |
+| Manifest keys | `ticker → {split: {shape=(T, 6), sample_count}}`; belief: `shape=(T, sample_count, pred_len, 4)` |
+| Guarantees | Deterministic seed per MC path (reproducible), T4 GPU (inference < 0.5 GB VRAM for batch=1) |
 | Known failures | CUDA OOM (model + tokenizer on small GPU → use T4 or CPU), Tokenizer not loaded (HF auth), Checkpoint not found (run M-FINE-TUNE first) |
-| CLI | `python src/core/kronos/predictor.py --checkpoint kronos_moex_best.pt --split test` |
-| Inference config | lookback=506 bars, pred_len=6 bars, temperature=0.6, top_p=0.9, top_k=0, sample_count=4, device=T4 |
+| CLI | `python -m src.core.kronos.predictor --feats X --timestamps Y --output Z --pred-len 12 --lookback 500 --seed 42 --bf16 --belief` |
+| CLI flags | `--feats`, `--timestamps`, `--ticker-names`, `--pred-len`, `--sample-count`, `--temperature`, `--top-p`, `--top-k`, `--lookback`, `--sub-batch` (T4: 8, A100: 16), `--model`, `--tokenizer`, `--seed`, `--bf16`, `--belief`, `--device` |
+| Inference config | lookback=500 (small) / 2036 (mini), pred_len=12, temperature=0.6, top_p=0.9, top_k=50, sample_count=5, device=T4/A100 |
 | Latency | ~0.45s per asset serial, ~1.5s batched (batch=21) — well within 10-min bar interval |
+| Modal deployment | `modal run scripts/modal_inference.py::{seed, infer_10min, infer_10min_small, infer_10min_a100}` |
+| Belief metrics | confidence, entropy_s1, top3_mass, entropy_ratio — shape `(n_windows, sample_count, pred_len, 4)` |
+| Seed determinism | `torch.manual_seed(seed + step*1000 + token_type)` — batch-size-independent MC paths |
+| Multi-TF | 10-min (lookback=500/2036, pred_len=12) and 1-hour (lookback=510, pred_len=2) |
 
 ---
 
@@ -180,6 +185,92 @@ M-BACKTEST report.json
 ```
 
 **Rule**: if a module cannot validate the predecessor's manifest, it MUST exit with code 1 and print the missing/broken key. Do NOT skip validation.
+
+---
+
+### M-SIM: Trade Simulation
+
+File: `src/evaluation/simulation.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Simulate single trade with TP/SL, SL priority on same bar |
+| Input | `i, sig, tp_level, sl_level, entry_open, raw, LK, PL` |
+| Output | `(bar_idx, trade_return, holding_period)` |
+| Functions | `simulate_trade`, `get_tp_sl`, `get_tp_sl_no_sl`, `get_tp_sl_no_tp`, `_weighted_q`, `get_tp_sl_w` |
+| Guarantees | SL priority over TP on same bar; horizon exit at PL; no lookahead |
+
+---
+
+### M-ENGINE: Backtest Execution Engine
+
+File: `src/evaluation/engine.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Run backtest on signal array, compute all metrics |
+| Input | signals array + data dict (from M-LOAD-SBER) |
+| Output | metrics dict + per_bar PnL array |
+| Functions | `run_backtest`, `run_backtest_custom`, `compute_all_metrics` |
+| Constants | `STRAT_METRICS` (12), `PRED_METRICS` (6), `TRADE_METRICS` (4), `ANNUAL_BARS` |
+
+---
+
+### M-QUARTERLY: Quarterly Performance Breakdown
+
+File: `src/evaluation/quarterly.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Per-quarter AverRet/Sharpe tables + CSV output |
+| Input | labels, per_bar arrays, timestamps |
+| Output | quarterly tables (printed) + CSV files |
+| Functions | `compute_quarterly_tables`, `save_results_csv`, `save_quarterly_csv`, `compute_h1_2026_metrics`, `save_all_results` |
+
+---
+
+### M-REGIME: BB Regime Classification
+
+File: `src/evaluation/regime.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | BB regime classification + temporal (hour/day-of-week) analysis |
+| Input | data dict + per_bar arrays |
+| Output | regime tables, filtered signals |
+| Functions | `compute_bar_metadata`, `compute_raw_bb_mapping`, `classify_regimes`, `build_regime_masks`, `compute_quarterly_breakdown`, `champion_breakdown`, `top5_15h_16h` |
+
+---
+
+### M-FILTERS: Signal Filter Computation
+
+File: `src/signals/filters.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Compute all signal filters (BB, LR, ATR, Volume, RSI, MC, rollWR) from data dict |
+| Input | data dict (from M-LOAD-SBER) |
+| Output | numpy arrays: filter masks, bool arrays |
+| Functions (19) | `compute_bb`, `bb_width_ok`, `bb_pct_ok`, `bb_touch_ok`, `compute_lr`, `compute_atr_filter`, `compute_volume_filter`, `compute_bb_momentum`, `compute_conf_trend`, `compute_mc_breadth`, `compute_rsi14`, `compute_pred_z`, `compute_roll_wr`, `compute_mc_agreement`, `compute_weighted_quantiles`, `compute_best_mc`, `compute_drop_low_conf`, `compute_asymmetry_ratio`, `apply_filters` |
+
+---
+
+### M-LOAD-SBER: SBER Numpy Data Loader
+
+File: `src/data/loader_sber.py`
+Status: ✅ ready
+
+| Поле | Значение |
+|------|----------|
+| Purpose | Load SBER numpy predictions + raw features → standardized data dict |
+| Input | `data/v3/predictions/10min_sber_mini/SBER_preds_pl12_sc5.npy` + `feats_test_raw.npy` |
+| Output | dict with 16 keys: preds, belief, raw, ts, N, conf, entry_close, entry_open, pred_ret, actual_ret, g_tp, g_sl, wf_q90, wf_q10, close_arr, conf_per_mc, LK, PL, COMM, Q_LONG, Q_SHORT, TP_Q, SL_Q |
+| Guarantees | Walk-forward quantiles (no lookahead), per-window TP/SL from MC distribution |
 
 ---
 

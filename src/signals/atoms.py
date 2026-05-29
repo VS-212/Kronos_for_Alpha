@@ -189,6 +189,70 @@ def asymmetry(close_samples: np.ndarray, prev_close: float) -> dict:
     }
 
 
+def belief_weight(
+    beliefs: np.ndarray,
+    confidence_weight: float = 1.0,
+    entropy_penalty_strength: float = 0.3,
+    early_exit_threshold: float = 1.5,
+) -> dict:
+    """Derive signal weight and early exit from belief metrics.
+
+    Args:
+        beliefs: (sample_count, pred_len, 4) — [confidence, entropy_s1, top3_mass, entropy_ratio].
+        confidence_weight: How heavily to boost based on initial confidence.
+        entropy_penalty_strength: How much to penalize high terminal entropy.
+        early_exit_threshold: Multiplier for entropy growth that triggers early exit.
+
+    Returns:
+        belief_score: scalar ∈ [0, 2] — signal quality weight (multiply your signal by this).
+        early_exit: bool — True if entropy spikes indicate regime change.
+        details: dict with intermediate metrics.
+    """
+    S, N, _ = beliefs.shape  # sample_count, pred_len, 4
+    CONF, ENT, TOP3, ENT_RAT = 0, 1, 2, 3
+
+    # Aggregate over MC samples
+    mean_b = np.mean(beliefs, axis=0)  # (pred_len, 4)
+
+    # Initial confidence (first step, first 3 samples for stability)
+    conf_init = float(np.mean(beliefs[:min(3, S), 0, CONF]))
+
+    # Terminal vs initial entropy
+    ent_init = float(mean_b[:2, ENT].mean())
+    ent_term = float(mean_b[-1, ENT])
+    ent_growth = ent_term - ent_init
+
+    # Top3 concentration at final step
+    top3_term = float(mean_b[-1, TOP3])
+
+    # Entropy ratio deviation from 1.0 (s1-s2 disagreement)
+    ent_ratio_dev = float(abs(np.mean(mean_b[:, ENT_RAT]) - 1.0))
+
+    # Belief score: confidence * (1 - entropy penalty) * concentration
+    ent_penalty = np.clip(ent_term / 10.0, 0, 1) * entropy_penalty_strength
+    score = conf_init * (1.0 - ent_penalty) * np.clip(top3_term / 0.5, 0.5, 1.5)
+    score = np.clip(score * 2.0 * confidence_weight, 0, 2)
+
+    # Early exit: sharp entropy rise or s1-s2 ratio divergence
+    early_exit = bool(
+        (ent_growth > max(ent_init * early_exit_threshold, 1.5))
+        or (ent_ratio_dev > 0.5 and ent_growth > 1.0)
+    )
+
+    return {
+        "belief_score": score,
+        "early_exit": early_exit,
+        "details": {
+            "confidence_init": conf_init,
+            "entropy_initial": ent_init,
+            "entropy_terminal": ent_term,
+            "entropy_growth": ent_growth,
+            "top3_terminal": top3_term,
+            "entropy_ratio_deviation": ent_ratio_dev,
+        },
+    }
+
+
 def expectancy(close_samples: np.ndarray, prev_close: float) -> dict:
     """Risk-adjusted return expectation.
 

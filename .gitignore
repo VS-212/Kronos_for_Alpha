@@ -33,14 +33,7 @@ id_*
 *.ipynb
 
 # Data (large files)
-data/raw/
-data/processed/
-data/tokens/
-data/predictions/
-data/results/
-data/*.parquet
-data/*.npy
-data/*.csv
+data/
 
 # Model checkpoints
 checkpoints/
@@ -72,3 +65,4 @@ wandb/
 
 # OpenCode
 .opencode/audits/
+.coverage

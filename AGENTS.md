@@ -86,20 +86,30 @@ grep "GRACE"         → docs/                                (GRACE XML artifac
 ## M-XXX Module ID Namespace
 
 | ID | File | Status |
-|---|---|---|
+|---|---|---|---|
 | M-FETCH | src/data/fetcher.py | ✅ ready |
 | M-PREPROCESS | src/data/preprocess.py | ❌ future |
 | M-TOKENIZE | src/core/kronos/tokenizer.py | ✅ ready |
 | M-DATASET | src/data/dataset.py | ❌ future |
 | M-FINE-TUNE | src/core/kronos/fine_tune.py | ❌ future |
-| M-PREDICT | src/core/kronos/predictor.py | ✅ ready |
+| M-PREDICT | src/core/kronos/predictor.py | ✅ ready (enhanced) |
 | M-BACKTEST | src/evaluation/backtest.py | ❌ future |
 | M-METRICS | src/evaluation/metrics.py | ✅ ready |
 | M-CONFIG | config/global.yaml | ✅ ready |
 | M-CALIBRATE | src/evaluation/calibrate.py | ✅ ready |
-| M-INFRA | — | ❌ future |
+| M-INFRA | scripts/modal_inference.py | ✅ ready |
 | M-DOCS | docs/ | ✅ ready |
 | M-CI | .github/workflows/ | ❌ future |
+| M-SIM | src/evaluation/simulation.py | ✅ ready |
+| M-ENGINE | src/evaluation/engine.py | ✅ ready |
+| M-QUARTERLY | src/evaluation/quarterly.py | ✅ ready |
+| M-REGIME | src/evaluation/regime.py | ✅ ready |
+| M-FILTERS | src/signals/filters.py | ✅ ready |
+| M-LOAD-SBER | src/data/loader_sber.py | ✅ ready |
+| M-STRATEGY-WF | src/strategies/verified/s01_wf.py | ✅ ready |
+| M-STRATEGY-BBPCT | src/strategies/verified/s02_bb_pct.py | ✅ ready |
+| M-STRATEGY-BBMOM | src/strategies/verified/s03_bb_mom.py | ✅ ready |
+| M-STRATEGY-BBROLLWR | src/strategies/verified/s04_bb_rollwr.py | ✅ ready |
 
 ## Directory
 
@@ -112,13 +122,12 @@ Kronos_for_Alpha/
 ├── src/
 │   ├── core/kronos/          # Tokenizer, model, modules, predictor, fine_tune
 │   ├── data/                 # Fetcher, preprocess, dataset, base abstractions
-│   ├── signals/              # 8 signal families (see signals/__init__.py for catalog)
-│   ├── strategies/           # Engine + 8 strategies
-│   └── evaluation/           # Metrics, backtest, walk-forward, calibration
+│   ├── signals/              # 8 signal families + BB filters + MC filters
+│   ├── strategies/           # verified/ (champions) + pending/ (unverified)
+│   └── evaluation/           # Metrics, simulation, engine, quarterly, regime, backtest, calibration
 │
 ├── templates/                # Reference examples (not production)
 │   ├── sweeps/
-│   ├── strategies/
 │   └── scripts/
 │
 ├── docs/
@@ -140,7 +149,7 @@ Kronos_for_Alpha/
 └── .gitignore
 ```
 
-## Pipeline (7 modules)
+## Pipeline (7 modules + infra)
 
 ```
 M-FETCH        src/data/fetcher.py          MOEX ISS API → 21 parquet + manifest.json
@@ -153,9 +162,29 @@ M-DATASET      src/data/dataset.py          Sliding windows (L=512, stride=8) �
   ↓
 M-FINE-TUNE    src/core/kronos/fine_tune.py Kronos-small, freeze tokenizer, CE loss, A100
   ↓
-M-PREDICT      src/core/kronos/predictor.py Autoregressive inference (T=0.6, MC=4) → OHLCV
+M-PREDICT      src/core/kronos/predictor.py Autoregressive inference (T=0.6, MC=5, seed) → OHLCV + belief
   ↓
 M-BACKTEST     src/evaluation/backtest.py   Cross-sectional (top-3 long, bot-2 short) → Sharpe
+```
+
+**M-PREDICT enhancements**: belief extraction (confidence, entropy, top3_mass, entropy_ratio per MC path), batch mode (`--sub-batch N`), seed determinism (per-call reset), bf16 precision, Modal GPU deployment.
+
+## SBER Single-Asset Evaluation Pipeline
+
+```
+run_sber.py  templates/scripts/run_sber.py    (orchestrator, 940 lines)
+  ↓
+M-LOAD-SBER  src/data/loader_sber.py          Load SBER numpy → data dict
+  ↓
+M-FILTERS    src/signals/filters.py           BB, LR, Tier1, Tier2, MC filters
+  ↓
+M-ENGINE     src/evaluation/engine.py         Backtest runner + metric computation
+  ↓
+M-SIM        src/evaluation/simulation.py     Trade simulation with TP/SL
+  ↓
+M-QUARTERLY  src/evaluation/quarterly.py      Quarterly breakdown + CSV output
+  ↓
+M-REGIME     src/evaluation/regime.py         BB regime + temporal analysis
 ```
 
 ## Agent Commands
@@ -165,7 +194,17 @@ M-BACKTEST     src/evaluation/backtest.py   Cross-sectional (top-3 long, bot-2 s
 | `python -m src.data.fetcher --start 2023-01-01 --end 2026-05-01` | M-FETCH | ✅ ready |
 | `python -m src.data.fetcher --status` | M-FETCH | ✅ ready |
 | `python -m src.data.fetcher --dry-run` | M-FETCH | ✅ ready |
+| `python -m src.core.kronos.predictor --feats X --timestamps Y --output Z --belief` | M-PREDICT | ✅ ready |
+| `modal run scripts/modal_inference.py::seed` | M-INFRA | ✅ ready |
+| `modal run scripts/modal_inference.py::infer_10min` | M-INFRA | ✅ ready |
+| `modal run scripts/modal_inference.py::infer_10min_small` | M-INFRA | ✅ ready |
+| `modal run --detach scripts/modal_inference.py::infer_10min_a100` | M-INFRA | ✅ ready |
 | `modal run src/core/kronos/fine_tune.py` | M-FINE-TUNE | ❌ future |
+| `python scripts/fetch_1h.py` | M-FETCH | ✅ ready |
+| `python scripts/extract_ticker.py --ticker SBER` | M-FETCH | ✅ ready |
+| `python scripts/align_predictions.py --tf10-preds ... --tf1h-preds ...` | M-PREDICT | ✅ ready |
+| `python templates/scripts/run_sber.py` | M-ENGINE | ✅ ready |
+| `python templates/scripts/backtest_sber_v2.py` | M-ENGINE | ✅ ready |
 | _rest_ | M-* | ❌ future |
 
 ## Docs (read by situation)
@@ -213,3 +252,10 @@ See `docs/conventions/commit.md` for full field semantics, security rules, and e
 - **Walk-forward split**: train 2023→2025, val 2025-02→2025-09, test 2025-09→2026-05
 - **CLI, not MCP**: batch operations, fire-and-forget. CLI via bash tool
 - **GRACE integration**: XML artifacts in `docs/`, semantic markers, grace lint
+- **Seed determinism**: per-call `torch.manual_seed(seed + step*1000 + token_type)` ensures batch-size-independent reproducibility
+- **bf16 stability**: `.float()` before softmax prevents bf16 rounding from changing token selection between T4 and A100
+- **Belief state**: entropy, confidence, top3_mass extracted per MC path per autoregressive step — zero-cost from existing logits
+- **Sub-batch mode**: `sub_batch=8` (T4) / `sub_batch=16` (A100) — balances VRAM vs throughput
+- **Modal volumes**: `kronos-hf-cache` (model cache), `kronos-predictions` (output) — persist across runs
+- **DVR refactoring**: monolith `backtest_sber_v2.py` (1556 lines) decomposed into 7 modules + orchestrator using DVR (Decompose→Verify→Replace) + Strangler Fig + Contract-First. Verified: 107 strategies bit-identical after refactoring.
+- **Pending/verified split**: `src/strategies/verified/` = validated on SBER numpy PL=12/sc=5. `src/strategies/pending/` = from Mamba pipeline, NOT validated.

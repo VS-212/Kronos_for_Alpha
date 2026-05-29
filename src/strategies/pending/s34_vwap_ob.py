@@ -1,16 +1,17 @@
 """
-M-STRATEGY-S05: Narrow BB breakout
-Contract: samples DF + mamba DF → trades DataFrame (narrow BB + consensus)
+M-STRATEGY-S34: VWAP-confirmed Order Block
+Contract: samples DF + mamba DF → trades DataFrame (VWAP + OB + consensus)
 Status: ✅ ready
 """
 
-"""S5: BB Narrow Mean Reversion — Width Filter + Mean Reversion combined."""
-import numpy as np
+"""S34: VWAP + OB — only enter OB when VWAP position confirms."""
 import pandas as pd
 
 from src.evaluation.output import reconstruct
 from src.signals.atoms import consensus
-from src.strategies.core import _enrich_trade, _simulate_trade, lookup_bb
+from src.signals.ict import detect_order_block
+from src.signals.vwap import compute_vwap
+from src.strategies.pending.core import _enrich_trade, _simulate_trade, lookup_mamba_window
 
 
 def run(
@@ -20,8 +21,8 @@ def run(
     sample_count,
     tp_q=0.90,
     sl_q=0.10,
-    min_bb_width=0.005,
-    bb_zone=0.5,
+    k=1.0,
+    lookback=96,
     atr_tp_mult=None,
     atr_sl_mult=None,
     save_first_n=0,
@@ -35,21 +36,36 @@ def run(
         if prev_close == 0:
             continue
 
-        bb = lookup_bb(mamba, row["pred_ts"])
-        if np.isnan(bb["bb_width"]) or bb["bb_width"] < min_bb_width:
-            continue
-
-        entry_price = float(actuals[0, 0])
-        zone_dist = bb_zone * (bb["bb_upper"] - bb["bb_lower"])
-        near_lower = entry_price <= bb["bb_lower"] + zone_dist
-        near_upper = entry_price >= bb["bb_upper"] - zone_dist
-
         cons = consensus(close_only, prev_close, threshold=consensus_threshold)
         if not cons["has_consensus"][0]:
             continue
         pred_dir = int(cons["consensus_dir"][0])
 
-        if not ((near_lower and pred_dir == 1) or (near_upper and pred_dir == -1)):
+        w = lookup_mamba_window(mamba, row["pred_ts"], lookback)
+        if not w["has_data"] or len(w["close"]) < 2:
+            continue
+
+        ob = detect_order_block(
+            w["open"],
+            w["high"],
+            w["low"],
+            w["close"],
+            lookback=48,
+            move_threshold=0.002,
+            max_age=24,
+        )
+        if ob["signal"] == "none":
+            continue
+        if not (
+            (ob["signal"] == "bullish" and pred_dir == 1)
+            or (ob["signal"] == "bearish" and pred_dir == -1)
+        ):
+            continue
+
+        vw = compute_vwap(w["high"], w["low"], w["close"], w["volume"], w["is_day_start"], k=k)
+        if pred_dir == 1 and not vw["below_vwap"]:
+            continue
+        if pred_dir == -1 and not vw["above_vwap"]:
             continue
 
         trade = _simulate_trade(

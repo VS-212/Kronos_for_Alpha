@@ -22,7 +22,7 @@
     <node id="M-METRICS"         name="Financial Metrics Library"        file="src/evaluation/metrics.py"             category="supporting" status="✅ ready"     phase="all" />
     <node id="M-CONFIG"          name="Unified Configuration"            file="config/global.yaml"                    category="supporting" status="✅ ready"     phase="all" />
     <node id="M-DOCS"            name="Documentation"                    file="docs/"                                 category="supporting" status="✅ ready"     phase="all" />
-    <node id="M-INFRA"           name="Infrastructure"                   file="—"                                     category="supporting" status="❌ future"    phase="all" />
+    <node id="M-INFRA"           name="Infrastructure (Modal GPU)"     file="scripts/modal_inference.py"           category="supporting" status="✅ ready"    phase="all" />
     <node id="M-CI"              name="CI/CD Pipeline"                   file=".github/workflows/"                    category="supporting" status="❌ future"    phase="all" />
 
     <!-- Signal families (7) -->
@@ -35,15 +35,15 @@
     <node id="M-SIGNAL-BARS"     name="Candlestick Pattern Classifier"   file="src/signals/bars.py"                   category="signal"     status="✅ ready"     phase="2+" />
 
     <!-- Strategies (9) -->
-    <node id="M-STRATEGY-CORE"   name="Shared Strategy Engine"           file="src/strategies/core.py"                category="strategy"   status="✅ ready"     phase="2+" />
-    <node id="M-STRATEGY-VANILLA" name="Pure Kronos Consensus"           file="src/strategies/vanilla.py"             category="strategy"   status="✅ ready"     phase="2+" />
-    <node id="M-STRATEGY-S01"    name="BB + Consensus Filter"            file="src/strategies/s01_bb.py"              category="strategy"   status="✅ ready"     phase="2+" />
-    <node id="M-STRATEGY-S02"    name="BB Mean Reversion"                file="src/strategies/s02_bb_mr.py"           category="strategy"   status="✅ ready"     phase="2+" />
-    <node id="M-STRATEGY-S05"    name="BB Narrow (Low Vol Breakout)"     file="src/strategies/s05_bb_breakout.py"     category="strategy"   status="✅ ready"     phase="2+" />
-    <node id="M-STRATEGY-S20"    name="Order Block"                      file="src/strategies/s20_ob.py"              category="strategy"   status="✅ ready"     phase="2+" />
-    <node id="M-STRATEGY-S28"    name="Volume-Filtered Order Block"      file="src/strategies/s28_vol_ob.py"          category="strategy"   status="⚠ failed-may2026" phase="2+" />
-    <node id="M-STRATEGY-S34"    name="VWAP + Order Block"               file="src/strategies/s34_vwap_ob.py"         category="strategy"   status="⚠ failed-may2026" phase="2+" />
-    <node id="M-STRATEGY-S38"    name="Low-Vol Order Block"              file="src/strategies/s38_lowvol_ob.py"       category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-CORE"   name="Shared Strategy Engine"           file="src/strategies/pending/core.py"        category="strategy"   status="✅ ready (moved to pending)" phase="2+" />
+    <node id="M-STRATEGY-VANILLA" name="Pure Kronos Consensus"           file="src/strategies/pending/vanilla.py"     category="strategy"   status="✅ ready (moved to pending)" phase="2+" />
+    <node id="M-STRATEGY-S01"    name="BB + Consensus Filter"            file="src/strategies/pending/s01_bb.py"      category="strategy"   status="✅ ready (moved to pending)" phase="2+" />
+    <node id="M-STRATEGY-S02"    name="BB Mean Reversion"                file="src/strategies/pending/s02_bb_mr.py"   category="strategy"   status="✅ ready (moved to pending)" phase="2+" />
+    <node id="M-STRATEGY-S05"    name="BB Narrow (Low Vol Breakout)"     file="src/strategies/pending/s05_bb_breakout.py" category="strategy"   status="✅ ready (moved to pending)" phase="2+" />
+    <node id="M-STRATEGY-S20"    name="Order Block"                      file="src/strategies/pending/s20_ob.py"      category="strategy"   status="✅ ready (moved to pending)" phase="2+" />
+    <node id="M-STRATEGY-S28"    name="Volume-Filtered Order Block"      file="src/strategies/pending/s28_vol_ob.py"  category="strategy"   status="⚠ failed-may2026" phase="2+" />
+    <node id="M-STRATEGY-S34"    name="VWAP + Order Block"               file="src/strategies/pending/s34_vwap_ob.py" category="strategy"   status="⚠ failed-may2026" phase="2+" />
+    <node id="M-STRATEGY-S38"    name="Low-Vol Order Block"              file="src/strategies/pending/s38_lowvol_ob.py" category="strategy"   status="✅ ready (moved to pending)" phase="2+" />
 
     <!-- Evaluation (5) -->
     <node id="M-EVALUATE"        name="Per-Window Evaluation"            file="src/evaluation/evaluate.py"            category="evaluation" status="✅ ready"     phase="2+" />
@@ -62,6 +62,18 @@
     <node id="M-DATA-BASE"       name="Abstract DataSource Interface"    file="src/data/base.py"                      category="data"       status="✅ ready"     phase="all" />
     <node id="M-DATA-CACHE"      name="Parquet-Backed Data Cache"        file="src/data/cache.py"                     category="data"       status="✅ ready"     phase="all" />
     <node id="M-DATA-MOEX"       name="MOEX ISS DataSource"              file="src/data/moex.py"                      category="data"       status="✅ ready"     phase="data" />
+
+    <!-- SBER Backtest Evaluation (10) -->
+    <node id="M-SIM"              name="Trade Simulation"                     file="src/evaluation/simulation.py"          category="evaluation" status="✅ ready"     phase="2+" />
+    <node id="M-ENGINE"           name="Backtest Execution Engine"            file="src/evaluation/engine.py"              category="evaluation" status="✅ ready"     phase="2+" />
+    <node id="M-QUARTERLY"        name="Quarterly Performance Breakdown"      file="src/evaluation/quarterly.py"           category="evaluation" status="✅ ready"     phase="2+" />
+    <node id="M-REGIME"           name="BB Regime + Temporal Analysis"        file="src/evaluation/regime.py"              category="evaluation" status="✅ ready"     phase="2+" />
+    <node id="M-FILTERS"          name="SBER Signal Filters (BB, MC, Tier1+2)" file="src/signals/filters.py"               category="signal"     status="✅ ready"     phase="2+" />
+    <node id="M-LOAD-SBER"        name="SBER Numpy Data Loader"               file="src/data/loader_sber.py"               category="data"       status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-WF"      name="WF Baseline Champion"                 file="src/strategies/verified/s01_wf.py"     category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-BBPCT"   name="WF+BB%B Champion (Sharpe 19.70)"      file="src/strategies/verified/s02_bb_pct.py" category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-BBMOM"   name="WF+BB%B+BBmom Champion (Sharpe 22.91)" file="src/strategies/verified/s03_bb_mom.py" category="strategy"   status="✅ ready"     phase="2+" />
+    <node id="M-STRATEGY-BBROLLWR" name="WF+BB%B+BBmom+rollWR Champion (Sharpe 23.51)" file="src/strategies/verified/s04_bb_rollwr.py" category="strategy" status="✅ ready" phase="2+" />
   </nodes>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -167,6 +179,22 @@
     <edge source="M-CALIBRATE"        target="M-WALK-FORWARD"     relation="consumes_output" />
     <edge source="M-CALIBRATE"        target="M-METRICS"          relation="uses"     />
     <edge source="M-CALIBRATE"        target="M-DATA-MOEX"        relation="uses"     />
+
+    <!-- ── SBER Backtest Evaluation ── -->
+    <edge source="M-ENGINE"       target="M-SIM"            relation="uses" />
+    <edge source="M-ENGINE"       target="M-METRICS"        relation="uses" />
+    <edge source="M-ENGINE"       target="M-QUARTERLY"      relation="uses" />
+    <edge source="M-ENGINE"       target="M-LOAD-SBER"      relation="uses" />
+    <edge source="M-FILTERS"      target="M-LOAD-SBER"      relation="consumes_output" />
+    <edge source="M-REGIME"       target="M-FILTERS"        relation="uses" />
+    <edge source="M-REGIME"       target="M-ENGINE"         relation="uses" />
+    <edge source="M-STRATEGY-WF"  target="M-ENGINE"         relation="uses" />
+    <edge source="M-STRATEGY-BBPCT" target="M-FILTERS"      relation="uses" />
+    <edge source="M-STRATEGY-BBPCT" target="M-ENGINE"       relation="uses" />
+    <edge source="M-STRATEGY-BBMOM" target="M-FILTERS"      relation="uses" />
+    <edge source="M-STRATEGY-BBMOM" target="M-ENGINE"       relation="uses" />
+    <edge source="M-STRATEGY-BBROLLWR" target="M-FILTERS"   relation="uses" />
+    <edge source="M-STRATEGY-BBROLLWR" target="M-ENGINE"    relation="uses" />
 
     <!-- ── Generic: all modules read config ── -->
     <edge source="M-KRONOS-TOKENIZER" target="M-CONFIG"          relation="reads_config" />
@@ -319,5 +347,15 @@
     <M-WALK-FORWARD></M-WALK-FORWARD>
     <M-KRONOS-MODULES></M-KRONOS-MODULES>
     <M-DATA-MOEX></M-DATA-MOEX>
+    <M-SIM></M-SIM>
+    <M-ENGINE></M-ENGINE>
+    <M-QUARTERLY></M-QUARTERLY>
+    <M-REGIME></M-REGIME>
+    <M-FILTERS></M-FILTERS>
+    <M-LOAD-SBER></M-LOAD-SBER>
+    <M-STRATEGY-WF></M-STRATEGY-WF>
+    <M-STRATEGY-BBPCT></M-STRATEGY-BBPCT>
+    <M-STRATEGY-BBMOM></M-STRATEGY-BBMOM>
+    <M-STRATEGY-BBROLLWR></M-STRATEGY-BBROLLWR>
   </module-registry>
 </grace:knowledge-graph>

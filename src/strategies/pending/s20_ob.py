@@ -6,7 +6,7 @@ Status: ✅ ready
 
 """S20: Order Block + Kronos — enter when price is at an OB zone."""
 from src.signals.ict import detect_order_block
-from src.strategies.core import _run_ict_strategy
+from src.strategies.pending.core import _run_ict_strategy
 
 
 def run(

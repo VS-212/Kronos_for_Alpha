@@ -24,6 +24,8 @@ def sharpe_ratio(returns: np.ndarray, rf: float = 0.0, periods: int = PERIODS_AN
 
 
 def max_drawdown(equity: np.ndarray) -> float:
+    if len(equity) < 2:
+        return 0.0
     peak = np.maximum.accumulate(equity)
     dd = (equity - peak) / peak
     return float(np.min(dd))
@@ -82,10 +84,14 @@ def ic_rank(actual: np.ndarray, pred: np.ndarray) -> float:
 
 
 def bias(actual: np.ndarray, pred: np.ndarray) -> float:
+    if len(actual) == 0:
+        return 0.0
     return float(np.mean(pred - actual))
 
 
 def mae(actual: np.ndarray, pred: np.ndarray) -> float:
+    if len(actual) == 0:
+        return 0.0
     return float(np.mean(np.abs(pred - actual)))
 
 
@@ -94,45 +100,83 @@ def prediction_volatility(samples: np.ndarray, prev_close: float) -> float:
     return float(np.mean(pred_std / max(prev_close, 1e-8)))
 
 
-def psr(returns: np.ndarray, target_sharpe: float = 0.0, periods: int = PERIODS_ANN) -> float:
+def _central_skewness(x: np.ndarray) -> float:
+    """Central skewness E[(x-μ)³] / σ³."""
+    mu = np.mean(x)
+    s = np.std(x, ddof=0)
+    if s < 1e-12:
+        return 0.0
+    return float(np.mean((x - mu) ** 3) / s ** 3)
+
+
+def _central_kurtosis(x: np.ndarray) -> float:
+    """Central excess kurtosis E[(x-μ)⁴] / σ⁴ - 3."""
+    mu = np.mean(x)
+    s = np.std(x, ddof=0)
+    if s < 1e-12:
+        return 0.0
+    return float(np.mean((x - mu) ** 4) / s ** 4) - 3.0
+
+
+def psr(returns: np.ndarray, target_sharpe: float = 0.0) -> float:
+    """Probabilistic Sharpe Ratio (Egozcue & Ziemba 2009).
+
+    Uses period-level Sharpe (non-annualized) with central skewness/kurtosis.
+    """
     if norm is None:
         return 0.0
     n = len(returns)
     if n < 2:
         return 0.0
-    sr = sharpe_ratio(returns, periods=periods)
-    skew = float(n**0.5 * np.mean(returns**3) / (np.std(returns) ** 3 + 1e-8))
-    kurt = float(n * np.mean(returns**4) / (np.std(returns) ** 4 + 1e-8))
-    var = (1 + 0.5 * sr**2 - skew * sr + (kurt - 3) * sr**2 / 4) / (n - 1)
-    z = (sr - target_sharpe) / (np.sqrt(var) + 1e-8)
+    mu = np.mean(returns)
+    sigma = np.std(returns, ddof=0)
+    if sigma < 1e-12:
+        return 1.0 if mu >= target_sharpe else 0.0
+    sr_period = mu / sigma
+    s3 = _central_skewness(returns)
+    s4 = _central_kurtosis(returns)
+    var_est = (1.0 + 0.5 * sr_period ** 2 - s3 * sr_period + s4 * sr_period ** 2 / 4.0) / (n - 1) if n > 1 else 1.0
+    z = (sr_period - target_sharpe) / (np.sqrt(var_est) + 1e-8)
     return float(norm.cdf(z))
 
 
-def dsharpe_ratio(returns: np.ndarray, periods: int = PERIODS_ANN) -> float:
+def dsharpe_ratio(returns: np.ndarray, num_trials: int = 1) -> float:
+    """Deflated Sharpe Ratio (Bailey & López de Prado 2012).
+
+    Adjusts PSR for multiple testing across num_trials strategies.
+    Default num_trials=1 returns PSR (no deflation).
+    """
     if norm is None:
         return 0.0
+    if num_trials < 2:
+        return psr(returns)
     n = len(returns)
     if n < 2:
         return 0.0
-    sr = sharpe_ratio(returns, periods=periods)
-    t = n / periods
-    z0 = norm.ppf(0.05)
-    z1 = norm.ppf(0.95)
-    sigma = 1.0 / np.sqrt(t)
-    dd = norm.cdf((sr - z0 * sigma) / np.sqrt(1 + z1**2 * sigma**2))
-    return float(dd)
+    mu = np.mean(returns)
+    sigma = np.std(returns, ddof=0)
+    if sigma < 1e-12:
+        return 0.5
+    sr_period = mu / sigma
+    s3 = _central_skewness(returns)
+    s4 = _central_kurtosis(returns)
+    var_est = (1.0 + 0.5 * sr_period ** 2 - s3 * sr_period + s4 * sr_period ** 2 / 4.0) / (n - 1)
+    gamma = 0.5772156649  # Euler-Mascheroni constant
+    z_max = (1 - gamma) * norm.ppf(1 - 1.0 / num_trials) + gamma * norm.ppf(1 - 1.0 / (num_trials * np.e))
+    z = (sr_period * np.sqrt(n - 1) - z_max) / (np.sqrt(var_est * (n - 1)) + 1e-8)
+    return float(norm.cdf(z))
 
 
 def sortino_ratio(returns: np.ndarray, rf: float = 0.0, periods: int = PERIODS_ANN) -> float:
-    """Sortino ratio — Sharpe using only downside deviation."""
+    """Sortino ratio — RMS of negative deviations (semi-deviation), not std of downside."""
     if len(returns) < 2:
         return 0.0
     excess = returns - rf / periods
     downside = np.minimum(excess, 0.0)
-    downside_std = np.std(downside, ddof=1)
-    if downside_std < 1e-8:
+    downside_risk = np.sqrt(np.mean(downside ** 2))
+    if downside_risk < 1e-8:
         return 0.0
-    return np.sqrt(periods) * np.mean(excess) / downside_std
+    return np.sqrt(periods) * np.mean(excess) / downside_risk
 
 
 def avg_return(returns: np.ndarray, periods: int = PERIODS_ANN) -> float:
@@ -143,7 +187,7 @@ def avg_return(returns: np.ndarray, periods: int = PERIODS_ANN) -> float:
 
 
 def n_trades(returns: np.ndarray) -> int:
-    """Number of non-zero return observations (trades)."""
+    """Number of non-zero return observations (active bars, not trade entries)."""
     return int(np.sum(returns != 0))
 
 

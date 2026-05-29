@@ -1,17 +1,15 @@
 """
-M-STRATEGY-S34: VWAP-confirmed Order Block
-Contract: samples DF + mamba DF → trades DataFrame (VWAP + OB + consensus)
+M-STRATEGY-VANILLA: Pure Kronos consensus entry
+Contract: samples DF + mamba DF → trades DataFrame
 Status: ✅ ready
 """
 
-"""S34: VWAP + OB — only enter OB when VWAP position confirms."""
+"""Vanilla: pure consensus strategy — no external filter, just Kronos q90/q10 TP/SL."""
 import pandas as pd
 
 from src.evaluation.output import reconstruct
 from src.signals.atoms import consensus
-from src.signals.ict import detect_order_block
-from src.signals.vwap import compute_vwap
-from src.strategies.core import _enrich_trade, _simulate_trade, lookup_mamba_window
+from src.strategies.pending.core import _enrich_trade, _simulate_trade
 
 
 def run(
@@ -21,11 +19,9 @@ def run(
     sample_count,
     tp_q=0.90,
     sl_q=0.10,
-    k=1.0,
-    lookback=96,
     atr_tp_mult=None,
     atr_sl_mult=None,
-    save_first_n=0,
+    save_first_n=1,
     consensus_threshold=0.8,
 ):
     trades = []
@@ -41,33 +37,6 @@ def run(
             continue
         pred_dir = int(cons["consensus_dir"][0])
 
-        w = lookup_mamba_window(mamba, row["pred_ts"], lookback)
-        if not w["has_data"] or len(w["close"]) < 2:
-            continue
-
-        ob = detect_order_block(
-            w["open"],
-            w["high"],
-            w["low"],
-            w["close"],
-            lookback=48,
-            move_threshold=0.002,
-            max_age=24,
-        )
-        if ob["signal"] == "none":
-            continue
-        if not (
-            (ob["signal"] == "bullish" and pred_dir == 1)
-            or (ob["signal"] == "bearish" and pred_dir == -1)
-        ):
-            continue
-
-        vw = compute_vwap(w["high"], w["low"], w["close"], w["volume"], w["is_day_start"], k=k)
-        if pred_dir == 1 and not vw["below_vwap"]:
-            continue
-        if pred_dir == -1 and not vw["above_vwap"]:
-            continue
-
         trade = _simulate_trade(
             close_only,
             actuals,
@@ -82,6 +51,7 @@ def run(
             atr_sl_mult=atr_sl_mult,
             save_first_n=save_first_n,
             consensus_threshold=consensus_threshold,
+            bypass_consensus=True,
         )
         if trade is not None:
             trades.append(_enrich_trade(trade, row))

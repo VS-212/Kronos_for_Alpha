@@ -205,7 +205,30 @@ OSError: [Errno 28] No space left on device
 
 ---
 
-## Cloud watch — как обнаружить проблему
+## Modal Volume download hangs
+
+Симптом:
+```
+modal volume get kronos-predictions /10min_sber/SBER_preds_pl12_sc5.npy /tmp/
+# Зависает без вывода. Файл создаётся 0 байт
+```
+
+Причина: Modal CLI v1.4.3 network connectivity issue для volume downloads. Вероятно связано с медленным каналом или прокси.
+
+Фикс:
+1. Использовать Python SDK вместо CLI:
+```python
+python3 -c "
+import modal
+vol = modal.Volume.from_name('kronos-predictions')
+data = b''.join(list(vol.read_file('/10min_sber/SBER_preds_pl12_sc5.npy')))
+with open('./SBER_preds_pl12_sc5.npy', 'wb') as f: f.write(data)
+"
+```
+2. Или скачать через Modal web UI (Settings → Storage → Volume)
+3. Или использовать `modal.Function.from_name()` с локальной функцией
+
+---
 
 При падении Modal job:
 1. `modal logs kronos-train` — последние логи

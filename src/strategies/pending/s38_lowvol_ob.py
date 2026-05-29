@@ -11,7 +11,7 @@ from src.evaluation.output import reconstruct
 from src.signals.atoms import consensus
 from src.signals.ict import detect_order_block
 from src.signals.volatility import compute_adr
-from src.strategies.core import _enrich_trade, _simulate_trade, lookup_mamba_window
+from src.strategies.pending.core import _enrich_trade, _simulate_trade, lookup_mamba_window
 
 
 def run(

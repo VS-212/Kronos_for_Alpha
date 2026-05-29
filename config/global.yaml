@@ -103,12 +103,12 @@ data:
   d_input: 6                          # (alpha) feature dimension
 
   splits:
-    train_start: "2023-01-01"         # (alpha) ~27k bars/asset
-    train_end: "2025-02-01"
-    val_start: "2025-02-01"
-    val_end: "2025-09-01"             # (alpha) ~7.6k bars/asset
-    test_start: "2025-09-01"
-    test_end: "2026-05-01"            # (alpha) ~8.7k bars/asset
+    train_start: "2023-01-03"         # actual data start
+    train_end: "2025-05-22"           # actual train/val boundary
+    val_start: "2025-05-22"
+    val_end: "2025-11-20"             # actual val/test boundary
+    test_start: "2025-11-20"
+    test_end: "2026-05-28"            # actual data end
 
   preprocessing:
     normalize: per-window-zscore      # μ,σ over lookback window, clip [-5,5]; no global leak
@@ -201,8 +201,8 @@ strategies:
 # ── Backtest (M-BACKTEST) ────────────────────────────────────────────────────
 backtest:
   strategy: "cross_sectional_top3_bot2"  # (alpha)
-  train_period: "2023-01-01_2025-02-01"  # (alpha) walk-forward train
-  test_period: "2025-02-01_2026-05-01"   # (alpha) walk-forward test
+  train_period: "2023-01-03_2025-05-22"  # (alpha) walk-forward train
+  test_period: "2025-05-22_2026-05-28"   # (alpha) walk-forward test
   session_start: "10:00"                  # (alpha) MSK
   last_entry: "18:10"                     # (alpha) 30 min before close
   force_exit: "18:35"                     # (alpha) 5 min before session end

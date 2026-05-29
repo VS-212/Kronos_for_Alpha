@@ -236,6 +236,54 @@ def trade_summary(
     }
 
 
+def save_beliefs(
+    ticker: str,
+    beliefs: list[np.ndarray] | np.ndarray,
+    pred_len: int,
+    sample_count: int,
+    config: dict,
+    output_dir: str,
+) -> Path:
+    """Save per-window belief metrics to compact npy.
+
+    Each item in beliefs has shape (sample_count, pred_len, 4) with columns:
+        [confidence, entropy_s1, top3_mass, entropy_ratio]
+
+    Saved numpy shape: (n_windows, sample_count, pred_len, 4) float16.
+    """
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if isinstance(beliefs, list):
+        arr = np.stack(beliefs, axis=0)
+    else:
+        arr = beliefs
+
+    path = out_dir / f"{ticker}_belief_pl{pred_len}_sc{sample_count}.npy"
+    np.save(path, arr.astype(np.float16))
+
+    meta_path = out_dir / f"{ticker}_belief_pl{pred_len}_sc{sample_count}_meta.json"
+    meta = {
+        "ticker": ticker,
+        "pred_len": pred_len,
+        "sample_count": sample_count,
+        "n_windows": arr.shape[0],
+        "dtype": "float16",
+        "columns": ["confidence", "entropy_s1", "top3_mass", "entropy_ratio"],
+        "shape": list(arr.shape),
+        **{k: v for k, v in config.items() if isinstance(v, (str, int, float, bool))},
+    }
+    with open(meta_path, "w") as f:
+        json.dump(meta, f, indent=2, default=str)
+
+    return path
+
+
+def load_beliefs(path: str) -> np.ndarray:
+    """Load belief metrics npy. Returns (n_windows, sample_count, pred_len, 4)."""
+    return np.load(path)
+
+
 def save_summary(
     tickers: list[str],
     all_configs: list[dict],

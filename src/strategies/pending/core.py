@@ -123,6 +123,8 @@ def _simulate_trade(
     consensus_threshold=0.8,
     dispersion_cap=None,
     exit_on_flip=False,
+    belief_blob=None,
+    belief_early_exit_threshold=1.5,
 ) -> dict:
     if not bypass_consensus:
         cons = consensus(close_only, prev_close, threshold=consensus_threshold)
@@ -192,6 +194,19 @@ def _simulate_trade(
                 exit_reason = "flip"
                 exit_price = float(actuals[i, 3])
                 break
+
+        # ── Belief-based early exit ──
+        if belief_blob is not None:
+            from src.evaluation.output import reconstruct
+            beliefs = reconstruct(belief_blob, *close_only.shape[:2], 4)
+            if i >= 2:
+                ent_init = float(np.mean(beliefs[:, :min(3, 1), 1]))  # entropy_s1 at step 0
+                ent_curr = float(np.mean(beliefs[:, i, 1]))
+                if ent_curr > max(ent_init * belief_early_exit_threshold, 2.0):
+                    exit_step = i
+                    exit_reason = "belief_exit"
+                    exit_price = float(actuals[i, 3])
+                    break
 
     trade_return = pred_dir * (exit_price - entry_price) / entry_price
     return {
